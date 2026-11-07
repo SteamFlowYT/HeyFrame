@@ -31,6 +31,16 @@ class TestCommands(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertEqual(answer(phrase).action,action)
 
+    def test_manual_recorder_status_parser(self):
+        from assistant import main
+        with patch('assistant.recorder_request', return_value='No recording in progress.') as ipc:
+            import contextlib, io
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(['recorder','status']),0)
+            ipc.assert_called_once_with('status')
+            self.assertIn('No recording',output.getvalue())
+
     def test_does_not_trigger_recording_for_ambiguous_words(self):
         self.assertNotEqual(answer('record').action,'record_start')
         self.assertNotEqual(answer('quit my game').action,'record_stop')

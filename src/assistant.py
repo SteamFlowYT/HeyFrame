@@ -267,6 +267,8 @@ def main(argv=None):
     sub = p.add_subparsers(dest='op', required=True)
     for name in ('version','doctor','mic-test','check-voice','check-asr','run','start','stop','status'):
         sub.add_parser(name)
+    recorder = sub.add_parser('recorder', help='query/control linked SFRecorder over local socket')
+    recorder.add_argument('command', choices=('start','stop','status'))
     perf = sub.add_parser('benchmark', help='measure running listener CPU and RAM (read-only)')
     perf.add_argument('--seconds', type=int, default=10)
     for name in ('say','test-command'):
@@ -289,6 +291,8 @@ def main(argv=None):
         Speaker(ROOT).speak(opts.text)
     elif opts.op == 'test-command':
         print(answer(opts.text).text)
+    elif opts.op == 'recorder':
+        print(recorder_request(opts.command))
     elif opts.op == 'stop':
         return user_service('disable', '--now', 'hey-frame.service')
     elif opts.op == 'status':

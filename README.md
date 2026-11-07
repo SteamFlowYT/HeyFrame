@@ -43,6 +43,8 @@ The updated SteamFlow Recorder SteamVR dashboard now has a **Hey Frame** row. Ta
 | "Tell me a joke" | Read a short original science-lab AI joke |
 | "Portal quote" or "GLaDOS quote" | Read a short Portal line or original GLaDOS-style response; not a full copyrighted dialogue collection |
 
+For a manual bridge test, use `~/.local/bin/hey-frame recorder status` in Konsole. You can also use `hey-frame recorder start` or `hey-frame recorder stop` when deliberately testing the recording workflow. The CLI uses the same safe local socket as the voice commands.
+
 The voice-to-recorder integration uses a user-owned **local UNIX socket**, not network access, remote commands, shell scripting, or intercepted SteamVR controls. The socket is present only when the SteamFlow Recorder SteamVR dashboard service runs. If you have the original upstream SFRecorder instead of the SteamFlowYT fork, recording voice commands cannot work until its dashboard is updated.
 
 **Faster speech:** Hey Frame now preloads the offline voice model **once per listening session** and speaks from a persistent local worker. That avoids repeating slow model startup for every answer, and an optimized vectorized HEV-style filter replaces the old Python sample-by-sample loop. The command recognizer and microphone remain on-device and the voice worker is killed on stop. Expect increased idle RAM usage; actual latency and battery cost must be measured on the headset.
