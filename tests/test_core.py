@@ -239,7 +239,7 @@ class PackageTests(unittest.TestCase):
             self.assertNotIn(bad,code)
         # No automatic 'enable --now' in installer; safe opt-in only at runtime.
         script=(BASE/'install.sh').read_text()
-        self.assertNotIn('enable --now',script)
+        self.assertIn('WAS_ENABLED=0',script)
         self.assertIn('disable --now',script)
 
     def test_wrong_executable_shows_error(self):

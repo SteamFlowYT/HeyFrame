@@ -23,8 +23,10 @@ from conflicts import frame_dictation_active, WARNING as CONFLICT_WARNING
 from listener import Microphone, Recognizer, audio_level
 from state import state_path, load_deadline, save_deadline
 from voice import Speaker, VOICE_NAME
+from recording import request as recorder_request
+from jokes import pick as pick_line
 
-VERSION = '0.3.0'
+VERSION = '0.4.0'
 ROOT = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger('hey-frame')
 
@@ -166,6 +168,13 @@ class Engine:
         remaining = None if self.deadline is None else max(0,round(self.deadline-self.wall()))
         reply = answer(phrase, timer_seconds_left=remaining)
         LOG.info('Handled command type: %s', reply.action)
+        if reply.action in ('record_start', 'record_stop', 'record_status'):
+            command = reply.action.removeprefix('record_')
+            self.speak(recorder_request(command))
+            return
+        if reply.action in ('joke', 'quote'):
+            self.speak(pick_line(reply.action))
+            return
         if reply.action == 'set_timer':
             self.deadline = self.wall() + reply.seconds
             save_deadline(self.timer_file, self.deadline)
@@ -224,6 +233,8 @@ class Engine:
                     time.sleep(min(10, 2 * failures))
         finally:
             self.mic.stop()
+            if hasattr(self.speaker, 'close'):
+                self.speaker.close()
         return 0
 
 
@@ -239,7 +250,13 @@ def run_foreground():
             print('Another Hey Frame listener is already running.', file=sys.stderr)
             return 1
         model = vosk.Model(str(ROOT/'models'/'vosk-model-small-en-us-0.15'))
-        e = Engine(model, vosk.KaldiRecognizer, Speaker(ROOT))
+        speaker = Speaker(ROOT, fast=os.environ.get('HEY_FRAME_FAST_VOICE', '1') != '0')
+        if speaker.fast:
+            if speaker.warmup():
+                LOG.info('Warm voice engine ready; replies avoid repeated model loading.')
+            else:
+                LOG.warning('Warm voice unavailable; using slower on-demand synthesis.')
+        e = Engine(model, vosk.KaldiRecognizer, speaker)
         signal.signal(signal.SIGINT, e.stop)
         signal.signal(signal.SIGTERM, e.stop)
         return e.run()

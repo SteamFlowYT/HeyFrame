@@ -7,7 +7,7 @@ PREVIOUS="$HOME/.local/share/hey-frame"
 BIN="$HOME/.local/bin/hey-frame"
 UNIT="$HOME/.config/systemd/user/hey-frame.service"
 
-printf '\nHey Frame 0.3 | Steam Frame offline assistant\n'
+printf '\nHey Frame 0.4 | Steam Frame offline assistant\n'
 printf 'Installer will NOT start the microphone service.\n\n'
 case "$(uname -m)" in aarch64|x86_64) : ;; *) echo 'Unsupported CPU: need Linux ARM64 (x86_64 for dev)' >&2; exit 1;; esac
 for tool in python3 pw-record pw-play; do
@@ -15,6 +15,11 @@ for tool in python3 pw-record pw-play; do
 done
 python3 -c 'import sys; assert (3,10) <= sys.version_info[:2] <= (3,14), "Python 3.10-3.14 required"'
 
+# Remember whether this user opted in to persistent listening before updating.
+WAS_ENABLED=0
+if command -v systemctl >/dev/null 2>&1 && systemctl --user is-enabled --quiet hey-frame.service 2>/dev/null; then
+  WAS_ENABLED=1
+fi
 # Stop only the Hey Frame user service; leave all other services untouched.
 SYSTEMCTL="$(command -v systemctl || true)"
 if [[ -z "$SYSTEMCTL" && -x /usr/bin/systemctl ]]; then SYSTEMCTL=/usr/bin/systemctl; fi
@@ -95,6 +100,7 @@ StartLimitBurst=3
 Type=simple
 ExecStart=%h/.local/bin/hey-frame run
 Environment=PYTHONUNBUFFERED=1
+Environment=HEY_FRAME_FAST_VOICE=1
 EnvironmentFile=-%h/.config/hey-frame/settings.env
 Restart=on-failure
 RestartSec=6
@@ -105,14 +111,20 @@ TimeoutStopSec=8
 [Install]
 WantedBy=default.target
 EOF
-if [[ -n "$SYSTEMCTL" ]]; then "$SYSTEMCTL" --user daemon-reload || true; fi
+if [[ -n "$SYSTEMCTL" ]]; then
+  "$SYSTEMCTL" --user daemon-reload || true
+  if [[ "$WAS_ENABLED" = 1 ]] && ! "$SYSTEMCTL" --user is-active --quiet frame-dictation.service 2>/dev/null; then
+    echo 'Restoring your previously enabled Hey Frame background service...'
+    "$SYSTEMCTL" --user enable --now hey-frame.service || true
+  fi
+fi
 cat <<'EOF'
 
-Install complete. Microphone listener is OFF.
+Install complete. Existing listening preference preserved when safe.
 
 1) Test speakers: ~/.local/bin/hey-frame say "Frame voice system online"
 2) Test microphone while speaking: ~/.local/bin/hey-frame mic-test
-3) ONLY IF both work: ~/.local/bin/hey-frame start
+3) ONLY IF both work: ~/.local/bin/hey-frame start (enables future boot autostart)
 4) Stop/disable at any time: ~/.local/bin/hey-frame stop
 
 For diagnostic info: ~/.local/bin/hey-frame doctor

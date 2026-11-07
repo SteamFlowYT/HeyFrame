@@ -207,6 +207,18 @@ def answer(text: str, timer_seconds_left: int | None = None,
     t = re.sub(r'^(?:hey frame|hay frame)\b[ ,]*','',t).strip()
     if not t:
         return Reply('Listening. Please say a command.')
+    # Recorder actions are explicit and locally scoped; never interpret ambiguous
+    # background audio as permission to record or terminate other processes.
+    if has(t, 'start recording', 'begin recording', 'record video', 'record gameplay', 'start the recorder'):
+        return Reply('Starting recording.', 'record_start')
+    if has(t, 'stop recording', 'finish recording', 'end recording', 'stop the recorder'):
+        return Reply('Stopping recording.', 'record_stop')
+    if has(t, 'recording status', 'am i recording', 'are we recording', 'check recording', 'is it recording'):
+        return Reply('Checking recording.', 'record_status')
+    if has(t, 'tell me a joke', 'tell a joke', 'tell me a glados joke', 'tell a glados joke', 'make me laugh', 'say a joke', 'something funny'):
+        return Reply('Generating joke.', 'joke')
+    if has(t, 'glados quote', 'portal quote', 'portal two quote', 'portal 2 quote', 'tell me a quote', 'give me a quote', 'say a quote', 'quote from portal', 'line from portal', 'something glados would say', 'say something sarcastic'):
+        return Reply('Generating quote.', 'quote')
     if has(t,'battery alerts on','turn on battery warnings','enable battery warnings'):
         return Reply('Low battery alerts enabled.', 'alerts_on')
     if has(t,'battery alerts off','turn off battery warnings','disable battery warnings'):
@@ -242,7 +254,7 @@ def answer(text: str, timer_seconds_left: int | None = None,
     if has(t,'uptime','how long have you been on'):
         return Reply(uptime_reply())
     if has(t,'help','what can you do','available commands'):
-        return Reply('Try battery, time, date, Wi-Fi, SteamVR status, storage, memory, volume level, uptime, status report, timers, or battery alerts on.')
+        return Reply('Try start recording, stop recording, recording status, a joke, a Portal quote, battery, timers, Wi-Fi, or headset status.')
     if has(t,'steamvr','steam vr','virtual reality running','vr running'):
         return Reply(steamvr_reply())
     if has(t,'hello','are you there','status report','system status','report'):

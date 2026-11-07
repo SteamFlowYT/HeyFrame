@@ -51,6 +51,7 @@ exit 77
         sys.write_text('''#!/bin/sh
 printf '%s\\n' "$*" >> "$HOME/service-calls.txt"
 if [ "$2" = is-active ]; then exit 3; fi
+if [ "$2" = is-enabled ]; then [ "${PREVIOUS_ENABLED:-0}" = 1 ]; exit $?; fi
 exit 0
 ''')
         for name in ('python3','virtual-python','systemctl'):
@@ -74,6 +75,16 @@ exit 0
             self.assertIn('--user disable --now hey-frame.service',calls)
             self.assertNotIn('--user enable --now hey-frame.service',calls)
             self.assertEqual((old/'unchanged.txt').read_text(),'old version')
+
+    def test_enabled_user_service_stays_enabled_during_upgrade(self):
+        with tempfile.TemporaryDirectory() as d:
+            home=Path(d)
+            env=self.setup_fake(home)
+            env['PREVIOUS_ENABLED']='1'
+            p=subprocess.run(['bash',str(BASE/'install.sh')],env=env,capture_output=True,text=True,timeout=15)
+            self.assertEqual(p.returncode,0,p.stdout+'\n'+p.stderr)
+            calls=(home/'service-calls.txt').read_text()
+            self.assertIn('--user enable --now hey-frame.service',calls)
 
     def test_failed_dependency_install_does_not_replace_launcher(self):
         with tempfile.TemporaryDirectory() as d:

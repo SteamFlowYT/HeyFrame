@@ -1,4 +1,4 @@
-# Hey Frame 0.3.0 — offline Steam Frame voice utility
+# Hey Frame 0.4.0 — offline Steam Frame voice utility
 
 > **SteamFlow GitHub edition — experimental.** Install and runtime have not been validated on a physical Steam Frame yet. Test speaker and microphone before enabling the wake-word service. If your physical Volume Up button still fails, resolve that separately first.
 
@@ -10,7 +10,7 @@ When this source is published at **SteamFlowYT/HeyFrame**, open Konsole **on the
 curl -fsSL https://raw.githubusercontent.com/SteamFlowYT/HeyFrame/main/steamflow-bootstrap.sh | bash
 ```
 
-The bootstrap downloads this GitHub repo into a temporary folder and runs `install.sh`. It does **not** automatically start listening. For safety, review `steamflow-bootstrap.sh` and `install.sh` before execution. After installation, test output and input before enabling:
+The bootstrap downloads this GitHub repo into a temporary folder and runs `install.sh`. A new install does **not** automatically start listening; updates preserve listening when it was previously enabled. For safety, review `steamflow-bootstrap.sh` and `install.sh` before execution. After installation, test output and input before enabling:
 
 ```bash
 ~/.local/bin/hey-frame say "Frame voice system online"
@@ -21,6 +21,35 @@ The bootstrap downloads this GitHub repo into a temporary folder and runs `insta
 Stop and disable the wake listener any time with `~/.local/bin/hey-frame stop`. See the detailed manual installation and diagnostics below.
 
 Wake phrase **"Hey Frame"**. Follow it immediately with a command or pause briefly and speak your command. English commands only. Runs directly on the headset; no gaming PC or online AI needed **after installation**. Installs entirely in the current user's home directory. It is a specialized, keyword-driven utility, **not** a general-purpose LLM.
+
+## Hey Frame v0.4 — fast speech, recorder voice control, Portal-style humour
+
+**For existing users:** update the two connected GitHub projects on the headset, **while not recording**. The SFRecorder update restarts its dashboard service, so stop recording first.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SteamFlowYT/SFRecorder/main/steamflow-bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/SteamFlowYT/HeyFrame/main/steamflow-bootstrap.sh | bash
+```
+
+The updated SteamFlow Recorder SteamVR dashboard now has a **Hey Frame** row. Tap it to toggle listening on and off, and to enable/disable automatic listener startup for future user sessions. The original Hey Frame `start` command already persists boot autostart; you do **not** need to rerun it after every headset restart. Updating from an enabled v0.3 version preserves this preference if no competing dictation service is running. A new install remains disabled until explicitly enabled.
+
+**New spoken commands:**
+
+| Speak after "Hey Frame" | Action |
+| --- | --- |
+| "Start recording" | Start SFRecorder through its **existing dashboard**; does not launch a duplicate recorder |
+| "Stop recording" | Ask SFRecorder to save and finish the current video |
+| "Recording status" or "Am I recording?" | Report whether the dashboard is recording or paused |
+| "Tell me a joke" | Read a short original science-lab AI joke |
+| "Portal quote" or "GLaDOS quote" | Read a short Portal line or original GLaDOS-style response; not a full copyrighted dialogue collection |
+
+The voice-to-recorder integration uses a user-owned **local UNIX socket**, not network access, remote commands, shell scripting, or intercepted SteamVR controls. The socket is present only when the SteamFlow Recorder SteamVR dashboard service runs. If you have the original upstream SFRecorder instead of the SteamFlowYT fork, recording voice commands cannot work until its dashboard is updated.
+
+**Faster speech:** Hey Frame now preloads the offline voice model **once per listening session** and speaks from a persistent local worker. That avoids repeating slow model startup for every answer, and an optimized vectorized HEV-style filter replaces the old Python sample-by-sample loop. The command recognizer and microphone remain on-device and the voice worker is killed on stop. Expect increased idle RAM usage; actual latency and battery cost must be measured on the headset.
+
+For lower idle memory use, create `~/.config/hey-frame/settings.env` with `HEY_FRAME_FAST_VOICE=0` and restart the Hey Frame service. Replies then use the slower original per-answer voice synthesis. `HEY_FRAME_VOICE_STYLE=clean` disables radio filtering.
+
+**Safety:** Voice commands never change system volume, intercept hardware buttons, execute arbitrary commands, or stop a recording they do not own. Recording remains controlled by SFRecorder's original engine, and all video saving is handled by that process.
 
 ## What changed after the v0.1/v0.2 failures
 
@@ -110,7 +139,7 @@ Press **Ctrl+C** to exit. Only one instance is permitted. The service uses a sys
 | "Hey Frame, help" | Command overview |
 | "Hey Frame, stop listening" | Exits foreground service process (autostart remains enabled until `stop` command) |
 
-No remote control, game launching, shell execution, account interaction, cloud inference, or fabricated answers. Limited English voice recognition is deliberate for low power and safety. Battery duration is approximate, depends on instantaneous power use, and can be unavailable.
+No network remote control, game launching, arbitrary shell execution, account interaction, cloud inference, or fabricated answers. The local recorder integration is an explicit exception for start/stop/status only. Limited English voice recognition is deliberate for low power and safety. Battery duration is approximate, depends on instantaneous power use, and can be unavailable.
 
 ## Audio routing / voice style
 
