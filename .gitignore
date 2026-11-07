@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.zip
+*.tar.gz
+*.tar.bz2
+models/
+*.onnx
+*.mdl
+*.wav
+*.log
+.env
+settings.env
