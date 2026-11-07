@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hey Frame 0.3 — offline Steam Frame utility with safe voice activation.
+"""Hey Frame 0.5 — offline Steam Frame utility with safe voice activation.
 
 Only reads PipeWire microphone / system status; owns no hardware inputs.
 No arbitrary commands, network use, changes to microphone defaults or volume.
@@ -24,9 +24,11 @@ from listener import Microphone, Recognizer, audio_level
 from state import state_path, load_deadline, save_deadline
 from voice import Speaker, VOICE_NAME
 from recording import request as recorder_request
-from jokes import pick as pick_line
+from jokes import pick as pick_line, add_quote, quotes_path, personal_quotes
+from gaming import mark_moment, save_note, last_note
+from vr_actions import request as vr_request
 
-VERSION = '0.4.0'
+VERSION = '0.5.0'
 ROOT = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger('hey-frame')
 
@@ -172,7 +174,28 @@ class Engine:
             command = reply.action.removeprefix('record_')
             self.speak(recorder_request(command))
             return
-        if reply.action in ('joke', 'quote'):
+        if reply.action == 'mark_moment':
+            self.speak(mark_moment())
+            return
+        if reply.action == 'screenshot':
+            self.speak(vr_request('screenshot'))
+            return
+        if reply.action in ('open_dashboard', 'pause_game'):
+            response = vr_request('open_dashboard')
+            if reply.action == 'pause_game' and response.startswith('Dashboard opened'):
+                response += ' This does not send a gamepad pause button.'
+            self.speak(response)
+            return
+        if reply.action == 'resume_game':
+            self.speak(reply.text)
+            return
+        if reply.action == 'save_note':
+            self.speak(save_note(reply.text))
+            return
+        if reply.action == 'last_note':
+            self.speak(last_note())
+            return
+        if reply.action in ('joke', 'quote', 'personal_quote'):
             self.speak(pick_line(reply.action))
             return
         if reply.action == 'set_timer':
@@ -263,10 +286,17 @@ def run_foreground():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description='Hey Frame 0.3 — offline voice assistant for Steam Frame')
+    p = argparse.ArgumentParser(description='Hey Frame 0.5 — offline voice assistant for Steam Frame')
     sub = p.add_subparsers(dest='op', required=True)
     for name in ('version','doctor','mic-test','check-voice','check-asr','run','start','stop','status'):
         sub.add_parser(name)
+    quote_add = sub.add_parser('add-quote', help='append a line to your private Portal quotes file')
+    quote_add.add_argument('text')
+    sub.add_parser('quotes-path', help='show private quotes file location')
+    sub.add_parser('list-quotes', help='list personally added quotes')
+    vr = sub.add_parser('vr', help='safe dashboard/screenshot actions')
+    vr.add_argument('action', choices=('open_dashboard', 'screenshot'))
+    sub.add_parser('mark', help='mark a moment in an active recording')
     recorder = sub.add_parser('recorder', help='query/control linked SFRecorder over local socket')
     recorder.add_argument('command', choices=('start','stop','status'))
     perf = sub.add_parser('benchmark', help='measure running listener CPU and RAM (read-only)')
@@ -291,6 +321,16 @@ def main(argv=None):
         Speaker(ROOT).speak(opts.text)
     elif opts.op == 'test-command':
         print(answer(opts.text).text)
+    elif opts.op == 'add-quote':
+        print('Personal quote added:', add_quote(opts.text))
+    elif opts.op == 'quotes-path':
+        print(quotes_path())
+    elif opts.op == 'list-quotes':
+        print('\n'.join(personal_quotes()) or 'No personal quotes yet.')
+    elif opts.op == 'mark':
+        print(mark_moment())
+    elif opts.op == 'vr':
+        print(vr_request(opts.action))
     elif opts.op == 'recorder':
         print(recorder_request(opts.command))
     elif opts.op == 'stop':
@@ -323,6 +363,6 @@ def main(argv=None):
 if __name__ == '__main__':
     try:
         raise SystemExit(main())
-    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         print('Hey Frame error:', exc, file=sys.stderr)
         raise SystemExit(1)

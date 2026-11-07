@@ -1,206 +1,140 @@
-# Hey Frame 0.4.0 — offline Steam Frame voice utility
+# Hey Frame v0.5 — Offline voice assistant for Steam Frame
 
-> **SteamFlow GitHub edition — experimental.** Install and runtime have not been validated on a physical Steam Frame yet. Test speaker and microphone before enabling the wake-word service. If your physical Volume Up button still fails, resolve that separately first.
+A practical, locally-running Steam Frame assistant: hands-free recording controls, headset battery, short timers, highlights, screenshots and sci-fi humour, plus a **dedicated Hey Frame tab in the SteamVR dashboard**. It is an experimental SteamOS ARM64 project. Native performance and the dashboard UI still require physical headset testing.
 
-## Install directly from Steam Frame (no PC)
+**No cloud AI, gaming PC, controller interception or system volume changes.** Speech recognition is local Vosk. Replies use the on-device sherpa-onnx GLaDOS-style synthetic voice (not original game audio). The recognizer is focused on simple English requests, not general conversation.
 
-When this source is published at **SteamFlowYT/HeyFrame**, open Konsole **on the headset** and run:
+## Install / update directly on the Frame
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/SteamFlowYT/HeyFrame/main/steamflow-bootstrap.sh | bash
-```
-
-The bootstrap downloads this GitHub repo into a temporary folder and runs `install.sh`. A new install does **not** automatically start listening; updates preserve listening when it was previously enabled. For safety, review `steamflow-bootstrap.sh` and `install.sh` before execution. After installation, test output and input before enabling:
+Open **Konsole on the headset**. Update SteamFlow Recorder first if you haven't already updated the recorder's voice-control bridge, then update Hey Frame:
 
 ```bash
-~/.local/bin/hey-frame say "Frame voice system online"
-~/.local/bin/hey-frame mic-test
-~/.local/bin/hey-frame start
-```
-
-Stop and disable the wake listener any time with `~/.local/bin/hey-frame stop`. See the detailed manual installation and diagnostics below.
-
-Wake phrase **"Hey Frame"**. Follow it immediately with a command or pause briefly and speak your command. English commands only. Runs directly on the headset; no gaming PC or online AI needed **after installation**. Installs entirely in the current user's home directory. It is a specialized, keyword-driven utility, **not** a general-purpose LLM.
-
-## Hey Frame v0.4 — fast speech, recorder voice control, Portal-style humour
-
-**For existing users:** update the two connected GitHub projects on the headset, **while not recording**. The SFRecorder update restarts its dashboard service, so stop recording first.
-
-```bash
+# Only if your SteamFlow Recorder has not been updated for voice integration:
 curl -fsSL https://raw.githubusercontent.com/SteamFlowYT/SFRecorder/main/steamflow-bootstrap.sh | bash
+# Then update Hey Frame:
 curl -fsSL https://raw.githubusercontent.com/SteamFlowYT/HeyFrame/main/steamflow-bootstrap.sh | bash
 ```
 
-The updated SteamFlow Recorder SteamVR dashboard now has a **Hey Frame** row. Tap it to toggle listening on and off, and to enable/disable automatic listener startup for future user sessions. The original Hey Frame `start` command already persists boot autostart; you do **not** need to rerun it after every headset restart. Updating from an enabled v0.3 version preserves this preference if no competing dictation service is running. A new install remains disabled until explicitly enabled.
+**Stop any active recording before updating SFRecorder.** The SFRecorder installation restarts its dashboard service. It retains recorded files. Both installers should be reviewed before piping their contents to bash. Neither command requires a Windows PC.
 
-**New spoken commands:**
+The Hey Frame installer reuses already-downloaded recognition/TTS models, verifies its packages, and **preserves your previous listening-on preference** if enabled. For a first install, the microphone stays off until you enable it. The **Hey Frame** SteamVR dashboard tab runs independently of the microphone listener, as long as SFRecorder's dashboard environment is installed.
 
-| Speak after "Hey Frame" | Action |
-| --- | --- |
-| "Start recording" | Start SFRecorder through its **existing dashboard**; does not launch a duplicate recorder |
-| "Stop recording" | Ask SFRecorder to save and finish the current video |
-| "Recording status" or "Am I recording?" | Report whether the dashboard is recording or paused |
-| "Tell me a joke" | Read a short original science-lab AI joke |
-| "Portal quote" or "GLaDOS quote" | Read a short Portal line or original GLaDOS-style response; not a full copyrighted dialogue collection |
-
-For a manual bridge test, use `~/.local/bin/hey-frame recorder status` in Konsole. You can also use `hey-frame recorder start` or `hey-frame recorder stop` when deliberately testing the recording workflow. The CLI uses the same safe local socket as the voice commands.
-
-The voice-to-recorder integration uses a user-owned **local UNIX socket**, not network access, remote commands, shell scripting, or intercepted SteamVR controls. The socket is present only when the SteamFlow Recorder SteamVR dashboard service runs. If you have the original upstream SFRecorder instead of the SteamFlowYT fork, recording voice commands cannot work until its dashboard is updated.
-
-**Faster speech:** Hey Frame now preloads the offline voice model **once per listening session** and speaks from a persistent local worker. That avoids repeating slow model startup for every answer, and an optimized vectorized HEV-style filter replaces the old Python sample-by-sample loop. The command recognizer and microphone remain on-device and the voice worker is killed on stop. Expect increased idle RAM usage; actual latency and battery cost must be measured on the headset.
-
-For lower idle memory use, create `~/.config/hey-frame/settings.env` with `HEY_FRAME_FAST_VOICE=0` and restart the Hey Frame service. Replies then use the slower original per-answer voice synthesis. `HEY_FRAME_VOICE_STYLE=clean` disables radio filtering.
-
-**Safety:** Voice commands never change system volume, intercept hardware buttons, execute arbitrary commands, or stop a recording they do not own. Recording remains controlled by SFRecorder's original engine, and all video saving is handled by that process.
-
-## What changed after the v0.1/v0.2 failures
-
-- Pins `vosk==0.3.45` and `sherpa-onnx==1.13.8`; explicitly installs NumPy and permits Vosk's pure-Python `srt` dependency to build from source, while requiring precompiled native libraries.
-- Creates a separate v0.3 install path and does **not** overwrite old version files.
-- Does **not** start the background microphone service automatically. First verifies packages, downloads offline models, tests native speech recognition and real TTS generation; manual `mic-test` and audible `say` are available before `start`.
-- `start` independently tests imports, voice generation, and microphone bytes before enabling the service. Run `hey-frame stop` to disable the background microphone.
-- Uses a small, fixed Vosk wake grammar; switches to a natural-language Vosk recognizer only for ~7s after the wake word, replaying up to 3.5s of recent audio so one-breath commands are less likely to be clipped.
-- Never uses `/dev/input`, `evdev`, `uinput`, controller bindings, SteamVR input overrides, `wpctl set-volume`, input grabs, or audio default-device changes. Existing one-sided hardware volume-button bugs require separate troubleshooting; **this app does not repair hardware-button faults**.
-- Serializes listener instances; bounds microphone retry failures instead of restart-spamming indefinitely; on failed voice output prints a diagnostic fallback to the service logs.
-- Timers are persisted in a private JSON file and resume after service restarts. No raw audio or transcripts are stored to disk.
-- Voice is upstream `vits-piper-en_US-glados`, with a subtle optional radio/HEV-inspired EQ. **Not the original Half-Life HEV voice**, not cloned from copyrighted recordings.
-
-## Download / install on Steam Frame
-
-Download `hey-frame-v0.3.0.zip` to Downloads, then run commands **one by one**, pressing Enter each time. Never prefix `cd` with `bash`:
+If you don't see the tab after installing, inspect:
 
 ```bash
-cd ~/Downloads
-unzip -o hey-frame-v0.3.0.zip
-cd hey-frame
-bash install.sh
+systemctl --user status hey-frame-dashboard.service --no-pager
+journalctl --user -u hey-frame-dashboard.service -n 50 --no-pager
 ```
 
-Requires `python3` (3.10–3.14), Python `venv` and `pip`, PipeWire `pw-record` and `pw-play`, and internet for initial Python packages and model downloads. Model sources are Vosk and the sherpa-onnx model release. Native ARM64 wheels are available upstream for the Steam Frame's expected Python 3.12 environment, but **this exact package has not been tested on a physical Steam Frame**. Installation can take time due to model downloads; follow terminal output. No `sudo` required.
+The dedicated dashboard uses SFRecorder's installed isolated Python (`~/.local/share/sfrecorder/venv/bin/python`) containing the working Steam Frame ARM64 OpenVR loader and Pillow. If the recorder is absent, the assistant can still listen, but the SteamVR dashboard needs SFRecorder installed. The dashboard is installed as a separate user service and auto-starts with your user session.
 
-You can also use the ZIP on another Linux machine for static testing; an x86_64 install may fail due to platform-specific binaries, and no Steam Frame support should be inferred.
+## Dashboard toggle
 
-## Safe first-run checklist
+Open the SteamVR dashboard and choose the separate **Hey Frame** tab (green microphone icon). Controls:
 
-**Do not activate if the physical Volume Up button remains faulty.** First resolve the headset issue independently.
+- **TURN LISTENING ON / OFF**: enables/disables the Hey Frame user service and its future autostart. OFF means the assistant is no longer capturing the microphone.
+- **START RECORDING** and **STOP / SAVE**: use the existing SteamFlow Recorder engine through its private local socket (no duplicate recorder).
+- **MARK HIGHLIGHT**: writes an approximate recording timestamp to `~/Videos/SFRecorder/HeyFrame_markers_YYYY-MM-DD.txt`.
+- **TAKE VR SCREENSHOT**: asks the SteamVR compositor for a stereo screenshot. Intended destination: `~/Pictures/HeyFrame`. Exact result still needs physical Steam Frame validation.
 
-1. Check real local speech-recognition model: `~/.local/bin/hey-frame check-asr`
-2. Generate (no playback):
-   ```bash
-   ~/.local/bin/hey-frame check-voice
-   ```
-3. Verify audible playback:
-   ```bash
-   ~/.local/bin/hey-frame say "Frame voice system online"
-   ```
-4. Verify microphone routing. **Speak during the test**; audio is not saved:
-   ```bash
-   ~/.local/bin/hey-frame mic-test
-   ```
-5. Enable wake listening only after these succeed:
-   ```bash
-   ~/.local/bin/hey-frame start
-   ```
-6. Stop and **disable boot autostart** any time:
-   ```bash
-   ~/.local/bin/hey-frame stop
-   ```
+If the headset has another dictation service running, starting Hey Frame is blocked to avoid the known Steam Frame Volume Up input-grab conflict. The assistant itself never accesses `/dev/input`, evdev, uinput or controller bindings.
 
-To test without enabling service or asking for mic permission:
-```bash
-~/.local/bin/hey-frame doctor
-~/.local/bin/hey-frame test-command "set a timer for five minutes"
-```
+Listening also starts automatically on later sessions **after you enable it once**. You don't need to type the start command on every boot. It can still be controlled in Konsole with `~/.local/bin/hey-frame start` and `~/.local/bin/hey-frame stop`.
 
-To run in Konsole foreground for real-time logs, stop the background service first and use:
-```bash
-~/.local/bin/hey-frame stop
-~/.local/bin/hey-frame run
-```
-Press **Ctrl+C** to exit. Only one instance is permitted. The service uses a systemd user unit and may be autostarted on future boots **only after `start` succeeds**; a spoken "stop listening" ends the current process but does not permanently disable the service at boot. Use `hey-frame stop` to disable startup.
+## Gaming-first voice commands
 
-## Useful commands
+Say **"Hey Frame"**, then the command. Short commands typically recognize more reliably than long ones.
 
 | Say | Result |
 |---|---|
-| "Hey Frame, how much battery life do I have left?" | Read headset battery percentage; approximate remaining time **only when sysfs exposes usable data** |
-| "Hey Frame, set a timer for five minutes" | Starts a 5-minute timer; max 2 hours; survives restart |
-| "Hey Frame, timer remaining" | Reports active timer time |
-| "Hey Frame, cancel timer" | Cancels active timer |
-| "Hey Frame, battery alerts on" | Enable spoken alerts at 20%, 10%, 5% (default OFF) |
-| "Hey Frame, battery alerts off" | Disable battery alerts |
-| "Hey Frame, Wi-Fi signal" | Reports connected signal strength if NetworkManager exposes it |
-| "Hey Frame, SteamVR status" | Read-only check whether `steamvr.service` is active |
-| "Hey Frame, storage" | Free storage on the user home partition |
-| "Hey Frame, memory" | Available RAM |
-| "Hey Frame, volume" | Reads the default sink level; **cannot change volume** |
-| "Hey Frame, uptime" | System uptime |
-| "Hey Frame, what time is it?" | Current time |
-| "Hey Frame, what's today's date?" | Current date |
-| "Hey Frame, status report" | Short system/battery announcement |
-| "Hey Frame, help" | Command overview |
-| "Hey Frame, stop listening" | Exits foreground service process (autostart remains enabled until `stop` command) |
+| **"Start recording"** | Start the installed SFRecorder with your existing settings |
+| **"Stop recording"** | Stop and finalize the recording |
+| **"Am I recording?"** | Recorder status and elapsed time |
+| **"Mark this moment"** | Write a timestamp to a highlights sidecar while recording |
+| **"Take a screenshot"** | Request a stereo SteamVR screenshot through the dashboard service |
+| **"How much battery is left?"** | Headset battery level; time estimate if available |
+| **"Battery alerts on"** | Speak low-battery warnings at 20%, 10% and 5% |
+| **"Set a timer for ten minutes"** | Start a local timer (up to 2 hours) |
+| **"Timer remaining" / "Cancel timer"** | Check or cancel the timer |
+| **"Note to self test the new lens"** | Save a brief locally transcribed note in `~/Documents/HeyFrame/notes.txt` |
+| **"Read last note"** | Speak your latest saved note |
+| **"Tell me a joke"** | Original sarcastic lab-AI joke |
+| **"Portal quote" / "GLaDOS quote"** | Prefer lines from your personal quote collection; otherwise very short built-in lines/original humour |
+| **"Personal quote"** | Only from your personally maintained quotes file |
+| **"Open dashboard"** | Open the SteamVR dashboard |
+| **"Pause game"** | Opens the SteamVR dashboard as a best-effort interruption; **does not press the game's Start/Menu button** |
+| **"Resume game"** | Explains how to close the dashboard manually; does not inject a gamepad event |
 
-No network remote control, game launching, arbitrary shell execution, account interaction, cloud inference, or fabricated answers. The local recorder integration is an explicit exception for start/stop/status only. Limited English voice recognition is deliberate for low power and safety. Battery duration is approximate, depends on instantaneous power use, and can be unavailable.
+The older date, uptime, free-memory, storage and volume queries remain available for backward compatibility, but the feature focus is now recording and gaming.
 
-## Audio routing / voice style
+### Pause / resume limitation
 
-If audio is routed to the wrong device, list nodes using `wpctl status` (read-only) and configure a target as an environment variable. Example for **one command only**:
+A SteamVR overlay has no supported generic API to spoof a **Menu/Start button press into the current VR game**. VR games handle the Frame's `/user/hand/right/input/menu` or `/user/hand/left/input/view` through game-specific input bindings. Non-VR streaming may use Steam Input or different key mappings. We do **not** use input grabs, fake system controllers or privileged `/dev/uinput` injection, because these could break other hardware controls (as happened with the original unrelated dictation addon).
 
-```bash
-HEY_FRAME_AUDIO_TARGET=42 ~/.local/bin/hey-frame say "Testing speaker routing"
-```
+**"Pause game" currently opens the dashboard**, and the game may or may not pause behind it. **"Resume game" does not close the SteamVR dashboard**, because OpenVR exposes `ShowDashboard` but not a universal `HideDashboard`. Use the Steam button to exit. Actual in-game pause requires a separate, tested binding for each game/runtime and is **not claimed in this version**.
 
-Do not assume node 42 is your output: it is only an example. `HEY_FRAME_MIC_TARGET` similarly specifies an explicit PipeWire capture node. For persistent service overrides, create `~/.config/hey-frame/settings.env` with e.g. `HEY_FRAME_MIC_TARGET=<correct source>`; restart only Hey Frame. Never edit SteamOS global audio settings on the app's behalf.
+## Actual Portal quotes — personal collection
 
-Voice filter defaults to `hev`. For a clean version of the underlying GLaDOS model:
+The public project ships only a few very short familiar lines and original GLaDOS-like jokes. It **does not bundle Portal dialogue archives or extracted game audio**. For longer lines you personally want, add them **on your headset**:
 
 ```bash
-HEY_FRAME_VOICE_STYLE=clean ~/.local/bin/hey-frame say "Welcome to the Frame"
+~/.local/bin/hey-frame add-quote "Your chosen line from the game"
 ```
 
-Voice output is generated into a temporary WAV under `/tmp` then played with `pw-play`. It is deleted afterward. The on-demand synthesizer process exits after each answer to reduce idle RAM. **No direct Half-Life voice assets are included**.
-
-## Diagnostics and removal
+Repeat for additional lines, then ask **"Hey Frame, Portal quote"** or **"Hey Frame, personal quote"**. To find or edit the file:
 
 ```bash
-~/.local/bin/hey-frame status
-journalctl --user -u hey-frame.service -n 80 --no-pager
+~/.local/bin/hey-frame quotes-path
+~/.local/bin/hey-frame list-quotes
 ```
 
-Measure actual listener CPU and RAM on your own headset (no changes made):
+File: `~/.config/hey-frame/portal-quotes.txt`, one quote per line, maximum 200 lines of 350 characters each. Lines starting `#` are ignored. Your custom quotes are **not uploaded to GitHub, overwritten by updates or sent to servers**. The voice synthesizes them locally; it doesn't replay Valve's original voice samples.
+
+## Response speed
+
+The default `HEY_FRAME_FAST_VOICE=1` keeps the GLaDOS speech engine loaded while listening, so it doesn't reload the model for every spoken response. The voice filter is NumPy-vectorized. This trades some RAM for lower reply latency; exact startup time, CPU and headset battery impact need on-device measurements. To use less RAM (but slower responses), add `HEY_FRAME_FAST_VOICE=0` to `~/.config/hey-frame/settings.env` then restart the service. Set `HEY_FRAME_VOICE_STYLE=clean` there to disable the HEV-like radio filter.
+
+To benchmark idle listener CPU/RAM (not battery drain):
 
 ```bash
 ~/.local/bin/hey-frame benchmark --seconds 30
 ```
 
-The CPU result uses process time divided by wall time, so 100% means one fully occupied CPU core, not 100% of the entire headset. It does **not** establish battery drain; compare actual discharge in repeated conditions for that.
+## Tests and troubleshooting
 
-The log records command categories and error messages, **not raw speech or recognized transcripts**. The generated response text appears in logs only if voice playback fails, and can include a spoken timer duration or battery report; don't share logs unreviewed.
-
-If you downloaded the archive and are still inside its `hey-frame` directory, uninstall with:
 ```bash
-bash uninstall.sh
+~/.local/bin/hey-frame doctor
+~/.local/bin/hey-frame check-asr
+~/.local/bin/hey-frame mic-test
+~/.local/bin/hey-frame say "Frame voice system online"
+~/.local/bin/hey-frame recorder status
+~/.local/bin/hey-frame vr open_dashboard
+~/.local/bin/hey-frame mark
+~/.local/bin/hey-frame status
 ```
 
-Or uninstall using the copy installed in the app home:
+To run listening in a terminal and see diagnostics, first disable the background service:
+
+```bash
+~/.local/bin/hey-frame stop
+~/.local/bin/hey-frame run
+```
+
+Use Ctrl+C to exit. `~/.local/bin/hey-frame start` enables the background service again. Service output is in `journalctl --user -u hey-frame.service -n 80 --no-pager`. The systemd listener unit is restarted only on failures, not after a normal exit.
+
+To uninstall the current assistant and its separate dashboard (personal quotes and notes are retained), run:
+
 ```bash
 bash ~/.local/share/hey-frame-v3/uninstall.sh
 ```
 
-It removes the new v0.3 install and service but deliberately keeps older v0.1/v0.2 files intact; it cannot repair a separate SteamOS audio or hardware issue. Timer and preferences JSON are retained unless you delete them manually.
+## Security and implementation
 
-## Development checks
+- Linux user services only, no system-wide installation, no global input/volume configuration changes.
+- Only the recognizer and locally generated speech run on the headset; no outside network after first installation.
+- Voice actions are allowlisted. Record control runs through a private UNIX socket owned by the SFRecorder dashboard, not via a shell or another recorder process.
+- The dedicated SteamVR dashboard uses its own private UNIX socket for safe `open_dashboard` and `screenshot` requests. Sockets are user-owned (`0600`), in user-only runtime directories (`0700`).
+- Spoken notes and markers are written locally only when explicitly requested. Recognized speech/audio isn't archived by the listener.
+- The project is experimental. Automated tests and syntax checks are **not equivalent** to physical Steam Frame validation of OpenVR/PipeWire timing, game-specific behaviour, battery drain, or recording reliability.
 
-```bash
-~/.local/share/hey-frame-v3/.venv/bin/python -m unittest discover -s tests -v
-bash -n install.sh
-bash -n uninstall.sh
-~/.local/share/hey-frame-v3/.venv/bin/python -m compileall -q src
-```
-
-Automated tests use a fake Vosk recognizer, mocked system queries and Python wheel installs. Testing on a development Linux machine **is not** a substitute for actual Steam Frame ARM64 package installation, real microphone source validation, GPU/CPU load or battery drain measurements, native TTS compatibility, and in-game background wake accuracy.
-
-## Third-party components / privacy
-
-Downloads code and models only at installation from PyPI, alphacephei.com and GitHub. Package URLs are documented in `src/download_models.py`. The listener does not make network calls after installation. No analytics, no recorded speech archive, no credentials, no direct controller interception. Vosk and sherpa-onnx have separate open-source licences; see their upstream repositories. The GLaDOS model is distributed **by sherpa-onnx upstream**, not bundled with this source ZIP; review its model licence before redistribution.
+See [SteamFlow Recorder](https://github.com/SteamFlowYT/SFRecorder) for recording engine details and third-party licenses for Vosk and sherpa-onnx.

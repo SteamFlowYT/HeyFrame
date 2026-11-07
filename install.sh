@@ -7,7 +7,7 @@ PREVIOUS="$HOME/.local/share/hey-frame"
 BIN="$HOME/.local/bin/hey-frame"
 UNIT="$HOME/.config/systemd/user/hey-frame.service"
 
-printf '\nHey Frame 0.4 | Steam Frame offline assistant\n'
+printf '\nHey Frame 0.5 | Steam Frame offline assistant\n'
 printf 'Installer will NOT start the microphone service.\n\n'
 case "$(uname -m)" in aarch64|x86_64) : ;; *) echo 'Unsupported CPU: need Linux ARM64 (x86_64 for dev)' >&2; exit 1;; esac
 for tool in python3 pw-record pw-play; do
@@ -111,8 +111,59 @@ TimeoutStopSec=8
 [Install]
 WantedBy=default.target
 EOF
+# Dedicated SteamVR dashboard, independent of SteamFlow Recorder's dashboard tab.
+# Reuse the recorder's tested pyopenvr/Pillow ARM64 virtualenv + Valve loader.
+DASH_BIN="$HOME/.local/bin/hey-frame-dashboard"
+DASH_UNIT="$HOME/.config/systemd/user/hey-frame-dashboard.service"
+cat > "$DASH_BIN" <<'DASH'
+#!/usr/bin/env bash
+set -euo pipefail
+PY="$HOME/.local/share/sfrecorder/venv/bin/python"
+if [[ ! -x "$PY" ]]; then
+  echo "Hey Frame dashboard requires SteamFlow Recorder's Python environment." >&2
+  exit 1
+fi
+exec "$PY" "$HOME/.local/share/hey-frame-v3/src/dashboard.py"
+DASH
+chmod 755 "$DASH_BIN"
+cat > "$DASH_UNIT" <<'DASH'
+[Unit]
+Description=Hey Frame dedicated SteamVR dashboard
+After=sfrecorder.service
+StartLimitIntervalSec=90
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/hey-frame-dashboard
+Restart=on-failure
+RestartSec=8
+Nice=13
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
+DASH
+
+# Do not overwrite any personal quotes on reinstall/update.
+QUOTES="$HOME/.config/hey-frame/portal-quotes.txt"
+if [[ ! -e "$QUOTES" ]]; then
+  mkdir -p "$HOME/.config/hey-frame"
+  printf '%s\n' '# Personal Portal quotes. One quote per line. This file stays on your headset.' > "$QUOTES"
+  chmod 600 "$QUOTES"
+fi
+
 if [[ -n "$SYSTEMCTL" ]]; then
   "$SYSTEMCTL" --user daemon-reload || true
+  # Leave Hey Frame listening OFF on a fresh install, but show the dashboard
+  # toggle whenever the already-installed SFRecorder Python is available.
+  SF_PY="$HOME/.local/share/sfrecorder/venv/bin/python"
+  if [[ -x "$SF_PY" ]] && "$SF_PY" -c 'import openvr, PIL' >/dev/null 2>&1; then
+    echo 'Enabling dedicated Hey Frame SteamVR dashboard tab...'
+    "$SYSTEMCTL" --user enable --now hey-frame-dashboard.service || true
+  else
+    echo 'Hey Frame dashboard requires SteamFlow Recorder. Install/update SFRecorder first.'
+  fi
   if [[ "$WAS_ENABLED" = 1 ]] && ! "$SYSTEMCTL" --user is-active --quiet frame-dictation.service 2>/dev/null; then
     echo 'Restoring your previously enabled Hey Frame background service...'
     "$SYSTEMCTL" --user enable --now hey-frame.service || true
@@ -127,6 +178,8 @@ Install complete. Existing listening preference preserved when safe.
 3) ONLY IF both work: ~/.local/bin/hey-frame start (enables future boot autostart)
 4) Stop/disable at any time: ~/.local/bin/hey-frame stop
 
+For personal Portal quotes: ~/.local/bin/hey-frame add-quote "Your chosen quote"
+For a separate SteamVR panel: look for the Hey Frame tab in Dashboard.
 For diagnostic info: ~/.local/bin/hey-frame doctor
 For testing without voice: ~/.local/bin/hey-frame test-command "battery"
 

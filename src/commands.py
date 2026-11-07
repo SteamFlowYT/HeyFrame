@@ -207,6 +207,32 @@ def answer(text: str, timer_seconds_left: int | None = None,
     t = re.sub(r'^(?:hey frame|hay frame)\b[ ,]*','',t).strip()
     if not t:
         return Reply('Listening. Please say a command.')
+    # Creator and gameplay actions go before generic words such as time/status.
+    if has(t, 'highlight marker', 'mark the moment', 'mark this moment',
+           'mark that moment', 'mark highlight', 'bookmark this moment', 'bookmark that'):
+        return Reply('Marking the recording.', 'mark_moment')
+    if has(t, 'take a screenshot', 'take screenshot', 'capture screenshot',
+           'screenshot please', 'grab a screenshot'):
+        return Reply('Taking screenshot.', 'screenshot')
+    if has(t, 'open dashboard', 'show dashboard', 'open steamvr dashboard',
+           'show steam dashboard', 'show steamvr dashboard'):
+        return Reply('Opening SteamVR dashboard.', 'open_dashboard')
+    if has(t, 'pause game', 'pause the game', 'pause my game'):
+        return Reply('Opening the SteamVR dashboard. Games may continue running behind it.', 'pause_game')
+    if has(t, 'resume game', 'resume the game', 'unpause game', 'unpause the game'):
+        return Reply('Close the SteamVR dashboard with the Steam button. In-game pause requires a game-specific binding.', 'resume_game')
+    if has(t, 'personal quote', 'my portal quote', 'read my quotes', 'my glados quote'):
+        return Reply('Selecting your personal quote.', 'personal_quote')
+    if has(t, 'read my last note', 'last note', 'what did i note', 'read last note'):
+        return Reply('Reading last note.', 'last_note')
+    # Notes are opt-in, brief and saved only on-device; no arbitrary dictation loop.
+    note = re.search(r'^(?:take a note|make a note|note to self|remember this)\s+(.+)$', t)
+    if note:
+        return Reply(note.group(1)[:160], 'save_note')
+    if has(t, 'battery warning on', 'low battery warning on'):
+        return Reply('Low battery alerts enabled.', 'alerts_on')
+    if has(t, 'battery warning off', 'low battery warning off'):
+        return Reply('Low battery alerts disabled.', 'alerts_off')
     # Recorder actions are explicit and locally scoped; never interpret ambiguous
     # background audio as permission to record or terminate other processes.
     if has(t, 'start recording', 'begin recording', 'record video', 'record gameplay', 'start the recorder'):
@@ -254,7 +280,7 @@ def answer(text: str, timer_seconds_left: int | None = None,
     if has(t,'uptime','how long have you been on'):
         return Reply(uptime_reply())
     if has(t,'help','what can you do','available commands'):
-        return Reply('Try start recording, stop recording, recording status, a joke, a Portal quote, battery, timers, Wi-Fi, or headset status.')
+        return Reply('Try recording, mark this moment, screenshot, battery, timer, a joke, Portal quote, note to self, or open dashboard.')
     if has(t,'steamvr','steam vr','virtual reality running','vr running'):
         return Reply(steamvr_reply())
     if has(t,'hello','are you there','status report','system status','report'):
