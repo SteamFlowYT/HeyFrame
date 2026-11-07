@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Safe install. Never starts the microphone background service.
+set -Eeuo pipefail
+HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APP="$HOME/.local/share/hey-frame-v3"
+PREVIOUS="$HOME/.local/share/hey-frame"
+BIN="$HOME/.local/bin/hey-frame"
+UNIT="$HOME/.config/systemd/user/hey-frame.service"
+
+printf '\nHey Frame 0.3 | Steam Frame offline assistant\n'
+printf 'Installer will NOT start the microphone service.\n\n'
+case "$(uname -m)" in aarch64|x86_64) : ;; *) echo 'Unsupported CPU: need Linux ARM64 (x86_64 for dev)' >&2; exit 1;; esac
+for tool in python3 pw-record pw-play; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "Missing $tool" >&2; exit 1; }
+done
+python3 -c 'import sys; assert (3,10) <= sys.version_info[:2] <= (3,14), "Python 3.10-3.14 required"'
+
+# Stop only the Hey Frame user service; leave all other services untouched.
+SYSTEMCTL="$(command -v systemctl || true)"
+if [[ -z "$SYSTEMCTL" && -x /usr/bin/systemctl ]]; then SYSTEMCTL=/usr/bin/systemctl; fi
+if [[ -n "$SYSTEMCTL" ]]; then
+  "$SYSTEMCTL" --user disable --now hey-frame.service >/dev/null 2>&1 || true
+  if "$SYSTEMCTL" --user is-active --quiet hey-frame.service 2>/dev/null; then
+    echo 'Old Hey Frame service did not stop. Abort, no files replaced.' >&2
+    exit 1
+  fi
+else
+  echo 'WARNING: systemctl is unavailable. Make sure old Hey Frame is stopped.' >&2
+fi
+
+if [[ -n "$SYSTEMCTL" ]] && "$SYSTEMCTL" --user is-active --quiet frame-dictation.service 2>/dev/null; then
+  echo 'WARNING: frame-dictation.service is running. It may have caused Volume Up interference.'
+  echo "This installer will NOT stop another developer's service. New Hey Frame cannot start until it is stopped."
+fi
+
+mkdir -p "$APP/src" "$APP/models" "$HOME/.local/bin" "$HOME/.config/systemd/user"
+cp "$HERE"/src/*.py "$APP/src/"
+cp "$HERE"/README.md "$APP/README.md"
+cp "$HERE"/uninstall.sh "$APP/uninstall.sh"
+chmod 755 "$APP/uninstall.sh"
+if [[ ! -x "$APP/.venv/bin/python" ]]; then
+  echo 'Creating isolated Python environment...'
+  python3 -m venv "$APP/.venv" || {
+    echo 'Python venv failed; nothing has been activated.' >&2
+    exit 1
+  }
+fi
+PY="$APP/.venv/bin/python"
+"$PY" -m pip --version >/dev/null || {
+  echo 'pip is missing inside the venv. Check the Steam Frame Python environment.' >&2
+  exit 1
+}
+printf '\nInstalling ARM64 native wheels and small Python packages...\n'
+"$PY" -m pip install --disable-pip-version-check \
+    --only-binary=vosk,sherpa-onnx,numpy,cffi \
+    'vosk==0.3.45' 'sherpa-onnx==1.13.8' 'numpy>=1.26,<3'
+"$PY" -m pip check
+"$PY" -c 'import vosk, numpy, sherpa_onnx; print("Verified: vosk, numpy, sherpa_onnx", numpy.__version__)'
+
+# Reuse downloaded models only if complete. Copies stay independent of old install.
+if [[ -d "$PREVIOUS/models" ]]; then
+  for name in vosk-model-small-en-us-0.15 vits-piper-en_US-glados; do
+    if [[ ! -d "$APP/models/$name" && -d "$PREVIOUS/models/$name" ]]; then
+      case "$name" in
+        vosk*) [[ -s "$PREVIOUS/models/$name/am/final.mdl" ]] || continue;;
+        *) [[ -s "$PREVIOUS/models/$name/en_US-glados.onnx" && -s "$PREVIOUS/models/$name/tokens.txt" && -d "$PREVIOUS/models/$name/espeak-ng-data" ]] || continue;;
+      esac
+      echo "Reusing local model: $name"
+      cp -a --reflink=auto "$PREVIOUS/models/$name" "$APP/models/$name"
+    fi
+  done
+fi
+printf '\nDownloading any missing offline models...\n'
+"$PY" "$APP/src/download_models.py" "$APP/models"
+# Verify synth BEFORE installing service or exposing listener.
+printf '\nTesting offline voice synthesis (no microphone)...\n'
+"$PY" "$APP/src/assistant.py" doctor
+"$PY" "$APP/src/assistant.py" check-asr
+"$PY" "$APP/src/assistant.py" check-voice
+
+# Only after all tests pass, replace launch wrapper / user unit.
+cat > "$BIN" <<'EOF'
+#!/usr/bin/env bash
+exec "$HOME/.local/share/hey-frame-v3/.venv/bin/python" "$HOME/.local/share/hey-frame-v3/src/assistant.py" "$@"
+EOF
+chmod 755 "$BIN"
+cat > "$UNIT" <<'EOF'
+[Unit]
+Description=Hey Frame (offline, hands-free Steam Frame voice utility)
+After=pipewire.service wireplumber.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/hey-frame run
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/.config/hey-frame/settings.env
+Restart=on-failure
+RestartSec=6
+Nice=12
+NoNewPrivileges=true
+TimeoutStopSec=8
+
+[Install]
+WantedBy=default.target
+EOF
+if [[ -n "$SYSTEMCTL" ]]; then "$SYSTEMCTL" --user daemon-reload || true; fi
+cat <<'EOF'
+
+Install complete. Microphone listener is OFF.
+
+1) Test speakers: ~/.local/bin/hey-frame say "Frame voice system online"
+2) Test microphone while speaking: ~/.local/bin/hey-frame mic-test
+3) ONLY IF both work: ~/.local/bin/hey-frame start
+4) Stop/disable at any time: ~/.local/bin/hey-frame stop
+
+For diagnostic info: ~/.local/bin/hey-frame doctor
+For testing without voice: ~/.local/bin/hey-frame test-command "battery"
+
+No hardware button access or volume write capability is installed.
+EOF
