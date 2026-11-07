@@ -1,0 +1,35 @@
+name: Import Hey Frame sources
+on:
+  push:
+    paths:
+      - 'hey-frame-source.tar.gz'
+      - '.github/workflows/unpack-source.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract and test source
+        run: |
+          set -euo pipefail
+          mkdir -p .source-stage
+          tar -xzf hey-frame-source.tar.gz -C .source-stage --no-same-owner
+          python3 -m unittest discover -s .source-stage/tests -q
+          bash -n .source-stage/install.sh
+          bash -n .source-stage/steamflow-bootstrap.sh
+          bash -n .source-stage/uninstall.sh
+          cp -a .source-stage/. .
+          rm -rf .source-stage
+      - name: Commit unpacked source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish verified Hey Frame source files'
+            git push
+          fi
