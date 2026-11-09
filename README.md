@@ -1,4 +1,4 @@
-# Hey Frame v0.5.1
+# Hey Frame v0.6.0
 
 Hey Frame is a small offline voice assistant I made for the Steam Frame. You say "Hey Frame" and you can start and stop recordings, mark highlights, take screenshots, check the battery, set timers and get the occasional sarcastic GLaDOS-style line back. It also adds its own Hey Frame tab to the SteamVR dashboard so you can do most of this with buttons too.
 
@@ -32,11 +32,41 @@ systemctl --user status hey-frame-dashboard.service --no-pager
 journalctl --user -u hey-frame-dashboard.service -n 50 --no-pager
 ```
 
+## Optional GLaDOS Mode
+
+Want a less cooperative personality while keeping the same practical commands? Say **"Hey Frame, is GLaDOS there?"** (or **"Hey Frame, GLaDOS mode"**). The voice assistant replies:
+
+> "Oh. You put the headset back on. I had almost finished enjoying the silence."
+
+From then on, actions still happen normally, but the spoken result gets a sarcastic comment. For example:
+
+- **"Hey Frame, start recording"** — Starts SFRecorder first, then responds with the real recorder result and something like "Try to do something worth watching this time."
+- **"Hey Frame, battery"** — Reads the actual headset battery percentage first, then adds a remark about the battery or your survival prospects.
+- **"Hey Frame, set a timer for ten minutes"** — Sets a real timer, then tells you that when it ends nothing exciting will happen.
+- **"Hey Frame, mark this moment"** — Saves the highlight and comments on your editing decisions.
+
+**Important:** This is a response personality, **not** another assistant or a generative chatbot. It does not analyze gameplay, add controller access, or change what any command does. If a recorder or screenshot action fails, it reports the failure without falsely claiming success. Low-battery alerts, shutdown messages, and your own Portal quotes remain clear and unmodified.
+
+To switch back, say **"Hey Frame, normal mode"** or **"Hey Frame, turn off GLaDOS"**. Ask **"Hey Frame, what mode are you in?"** to hear which is active.
+
+You can also toggle **GLaDOS: ON/OFF** in the dedicated Hey Frame SteamVR dashboard, next to the microphone on/off control. This switch also works when the microphone listener is disabled.
+
+The mode is saved privately to `~/.config/hey-frame/mode.json`, survives reboot and updates, and switches immediately without restarting the service. If you prefer Konsole:
+
+```bash
+~/.local/bin/hey-frame mode glados
+~/.local/bin/hey-frame mode normal
+~/.local/bin/hey-frame mode status
+```
+
+The sarcastic lines are original lines you supplied and other original lab-AI quips, delivered in the existing synthetic voice. They do not use game audio.
+
 ## The dashboard tab
 
 Open the SteamVR dashboard and look for the Hey Frame tab with the green microphone icon. You get these buttons:
 
 - **Turn listening on / off** turns the voice assistant on or off, including whether it starts automatically next time. Off means it's not using the microphone at all.
+- **GLaDOS: ON/OFF** switches between sarcastic and normal replies without changing the listening setting.
 - **Start recording** and **Stop / save** control SteamFlow Recorder directly, so it's the same recorder with your same settings, not a second one.
 - **Mark highlight** saves a rough timestamp of the current recording to `~/Videos/SFRecorder/HeyFrame_markers_YYYY-MM-DD.txt`, so you can find the good moments later when editing.
 - **Take VR screenshot** asks SteamVR for a stereo screenshot, which should end up in `~/Pictures/HeyFrame`. I still need to confirm this one properly on the headset.
@@ -47,7 +77,7 @@ One thing worth knowing: if you have another dictation add-on running, Hey Frame
 
 ## Voice commands
 
-Say "Hey Frame" and then the command. Shorter commands get picked up more reliably than long ones.
+Say "Hey Frame" and then the command. Shorter commands get picked up more reliably than long ones. You can optionally enable GLaDOS Mode for sarcastic replies while keeping the same actions.
 
 | Say | What it does |
 |---|---|
