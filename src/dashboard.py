@@ -20,6 +20,8 @@ import sys
 import threading
 import time
 
+from glados_mode import get_mode
+
 APP_KEY = 'steamflow.heyframe.dashboard'
 BIN = Path.home() / '.local' / 'bin' / 'hey-frame'
 SYSPY = Path.home() / '.local' / 'share' / 'sfrecorder' / 'venv' / 'bin' / 'python'
@@ -49,17 +51,20 @@ def source_available() -> bool:
 
 def invoke_hey_frame(action: str) -> str:
     """Only selected named CLI subcommands; never interpret user-provided shell text."""
-    if action not in ('start', 'stop'):
+    if action not in ('start', 'stop', 'mode-glados', 'mode-normal'):
         raise ValueError('Unknown dashboard command')
     if not source_available():
         return 'Hey Frame is not installed.'
     try:
-        result = subprocess.run([str(BIN), action], capture_output=True, text=True,
+        args = [str(BIN), 'mode', action.removeprefix('mode-')] if action.startswith('mode-') else [str(BIN), action]
+        result = subprocess.run(args, capture_output=True, text=True,
                                 timeout=45 if action == 'start' else 12)
     except (OSError, subprocess.SubprocessError) as exc:
         return f'Unable to change Hey Frame: {exc}'[:120]
     if result.returncode:
         return (result.stderr.strip() or result.stdout.strip() or 'Unable to change listener')[-150:]
+    if action.startswith('mode-'):
+        return 'GLaDOS mode enabled.' if action == 'mode-glados' else 'Normal replies enabled.'
     return ('Listening enabled for future sessions.' if action == 'start'
             else 'Listening and automatic startup disabled.')
 
@@ -145,7 +150,7 @@ class Panel:
         if enabled:
             self.hitboxes.append((*box, action))
 
-    def draw(self, listening, busy, info, rec='unknown'):
+    def draw(self, listening, busy, info, rec='unknown', glados=False):
         from PIL import Image, ImageDraw
         image = Image.new('RGBA', (self.WIDTH, self.HEIGHT), self.BG)
         d = ImageDraw.Draw(image)
@@ -155,8 +160,21 @@ class Panel:
         d.ellipse((150, 126, 194, 170), fill=color)
         d.text((213, 148), 'MICROPHONE LISTENING' if listening else 'LISTENING OFF',
                font=self.mid, fill=self.FG, anchor='lm')
-        self.button(d, 205, 'Working...' if busy else ('TURN LISTENING OFF' if listening else 'TURN LISTENING ON'),
-                    'toggle', enabled=not busy, color=self.RED if listening else self.GREEN)
+        # Two independent toggles: voice listening and response personality.
+        # Mode can be changed even while the microphone is disabled.
+        for box, title, action, color in (
+            ((64, 205, 390, 299), 'LISTEN: ON' if listening else 'LISTEN: OFF',
+             'toggle', self.GREEN if listening else self.RED),
+            ((410, 205, 736, 299), 'GLaDOS: ON' if glados else 'GLaDOS: OFF',
+             'mode_toggle', self.GREEN if glados else self.BLUE),
+        ):
+            d.rounded_rectangle(box, radius=20,
+                                fill=color if not busy else (37, 48, 60, 255))
+            d.text(((box[0] + box[2]) // 2, 252),
+                   'Working...' if busy else title,
+                   font=self.mid, fill=self.FG if not busy else self.DIM, anchor='mm')
+            if not busy:
+                self.hitboxes.append((*box, action))
         self.button(d, 323, 'START RECORDING', 'record_start', enabled=not busy)
         self.button(d, 435, 'STOP / SAVE RECORDING', 'record_stop', enabled=not busy, color=self.RED)
         self.button(d, 547, 'MARK HIGHLIGHT', 'marker', enabled=not busy)
@@ -244,6 +262,7 @@ def run_panel():
     overlay.setOverlayRaw(thumb, raw, icon.width, icon.height, 4)
     conn = DashboardSocket()
     listener = is_listening()
+    glados = get_mode() == 'glados'
     busy = False
     info = 'Ready. Select an action using the controller.'
     recorder_state = 'checking'
@@ -277,7 +296,7 @@ def run_panel():
         return 'Unsupported dashboard command.'
 
     def redraw():
-        image = panel.draw(listener, busy, info, recorder_state)
+        image = panel.draw(listener, busy, info, recorder_state, glados=glados)
         pixels = image.tobytes()
         raw = (ctypes.c_ubyte * len(pixels)).from_buffer_copy(pixels)
         overlay.setOverlayRaw(handle, raw, image.width, image.height, 4)
@@ -292,14 +311,17 @@ def run_panel():
                     info = results.get_nowait()
                     busy = False
                     listener = is_listening()
+                    glados = get_mode() == 'glados'
                     redraw()
             except queue.Empty:
                 pass
             if now >= check_at and not busy:
                 check_at = now + 2.0
                 current = is_listening()
-                if current != listener:
+                current_glados = get_mode() == 'glados'
+                if current != listener or current_glados != glados:
                     listener = current
+                    glados = current_glados
                     redraw()
             while openvr.VRSystem().pollNextEvent(event):
                 if event.eventType == openvr.VREvent_Quit:
@@ -312,6 +334,10 @@ def run_panel():
                     action = panel.clicked(x, y)
                     if action == 'toggle':
                         schedule('Switching microphone...', lambda: invoke_hey_frame('stop' if listener else 'start'))
+                        redraw()
+                    elif action == 'mode_toggle':
+                        schedule('Switching response personality...', lambda: invoke_hey_frame(
+                            'mode-normal' if glados else 'mode-glados'))
                         redraw()
                     elif action == 'record_start':
                         schedule('Starting recorder...', lambda: recording_request('start'))
