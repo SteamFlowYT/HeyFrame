@@ -201,22 +201,40 @@ def steamvr_reply() -> str:
     return 'SteamVR service status is unavailable.'
 
 
+# Vosk's small English model may hear the character name GLaDOS as a
+# sequence of letters. Canonicalize only the precise six-letter phonetic run;
+# do not broadly reinterpret unrelated speech or game commands.
+SPELLED_GLADOS = re.compile(
+    r'\b(?:g|gee|jee)\s+(?:l|el|ell)\s+(?:a|ay|aye)\s+'
+    r'(?:d|de|dee)\s+(?:o|oh|oo)\s+(?:s|es|ess)\b'
+)
+
+
+def normalize_persona_name(transcript: str) -> str:
+    return SPELLED_GLADOS.sub('glados', transcript)
+
+
 def answer(text: str, timer_seconds_left: int | None = None,
            battery_root: Path = Path('/sys/class/power_supply'), now: datetime | None = None) -> Reply:
     t = normalize(text)
     t = re.sub(r'^(?:hey frame|hay frame)\b[ ,]*','',t).strip()
     if not t:
         return Reply('Listening. Please say a command.')
-    # Persona selection is a command, not a change to the recognition model.
-    # Vosk can transcribe GLaDOS as 'glad os' or 'glad us'.
+    # GLaDOS may be recognized as "G L A D O S", "gee el ay dee oh ess",
+    # or "gee el ay de oo es"; allow those exact phonetic variations.
+    t = normalize_persona_name(t)
     glados_names = ('glados', 'glad os', 'glad us', 'gladys')
     if (has(t, 'normal mode', 'switch to normal', 'back to normal',
             'disable glados', 'turn off glados', 'glados off',
-            'stop being glados', 'regular voice', 'usual mode')
+            'stop being glados', 'regular voice', 'usual mode',
+            'turn off sarcastic mode', 'disable sarcastic mode',
+            'sarcasm off', 'sarcastic mode off', 'no sarcasm',
+            'stop being sarcastic', 'normal replies', 'stop sarcasm')
             or (has(t, 'turn off', 'disable', 'deactivate') and any(has(t, name) for name in glados_names))):
         return Reply('Normal response mode restored.', 'mode_off')
     if has(t, 'which voice mode', 'what mode are you in', 'personality mode',
-           'is glados mode on', 'is glados mode active', 'is glad os mode on'):
+           'is glados mode on', 'is glados mode active', 'is glad os mode on',
+           'is sarcastic mode on', 'is sarcasm mode on'):
         return Reply('Checking response mode.', 'mode_status')
     if (has(t, 'is glados there', 'is glad os there', 'is glad us there',
             'is glados ther', 'is glad os ther', 'is glad us ther',
@@ -224,7 +242,9 @@ def answer(text: str, timer_seconds_left: int | None = None,
             'glados are you there', 'glad os are you there',
             'activate glados', 'enable glados', 'glados mode', 'glad os mode',
             'switch to glados', 'bring in glados', 'summon glados',
-            'hello glados', 'hey glados')):
+            'hello glados', 'hey glados', 'sarcastic mode', 'sarcasm mode',
+            'enable sarcasm', 'activate sarcasm', 'be sarcastic',
+            'turn on sarcasm', 'switch to sarcastic mode')):
         return Reply('GLaDOS response mode activated.', 'mode_on')
 
     # Creator and gameplay actions go before generic words such as time/status.
