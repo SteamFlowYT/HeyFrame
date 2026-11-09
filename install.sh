@@ -7,7 +7,7 @@ PREVIOUS="$HOME/.local/share/hey-frame"
 BIN="$HOME/.local/bin/hey-frame"
 UNIT="$HOME/.config/systemd/user/hey-frame.service"
 
-printf '\nHey Frame 0.6.1 | Steam Frame offline assistant\n'
+printf '\nHey Frame 0.6.2 | Steam Frame offline assistant\n'
 printf 'Installer will NOT start the microphone service.\n\n'
 case "$(uname -m)" in aarch64|x86_64) : ;; *) echo 'Unsupported CPU: need Linux ARM64 (x86_64 for dev)' >&2; exit 1;; esac
 for tool in python3 pw-record pw-play; do
