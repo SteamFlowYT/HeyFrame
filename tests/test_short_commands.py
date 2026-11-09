@@ -24,8 +24,10 @@ class SimulatedVosk:
         self.words = b''
 
     def AcceptWaveform(self, audio):
+        # A mock acoustic result, not actual PCM. Consecutive synthetic wake
+        # chunks repeat the same words; do not concatenate their fake labels.
         if audio:
-            self.words += audio
+            self.words = audio
         return audio.endswith(b'|end')
 
     def _phrase(self):
