@@ -30,19 +30,30 @@ class CommandParserTests(unittest.TestCase):
             "GLaDOS mode",
             "activate GLADOS",
             "switch to glados",
+            "Hey Frame, is G-L-A-D-O-S there?",
+            "hey frame is g l a d o s there",
+            "hey frame is gee el ay dee oh ess there",
+            "hey frame is gee el ay de oo es there",
+            "hey frame is jee ell aye dee oh ess there",
+            "hey frame turn on sarcastic mode",
+            "hey frame sarcastic mode",
+            "hey frame be sarcastic",
         ):
             with self.subTest(phrase=phrase):
                 self.assertEqual(answer(phrase).action, "mode_on")
 
     def test_deactivation_phrases(self):
         for phrase in ("normal mode", "back to normal", "turn off glados mode",
-                       "glados off", "switch to normal"):
+                       "glados off", "switch to normal", "turn off sarcastic mode",
+                       "sarcasm off", "stop being sarcastic"):
             with self.subTest(phrase=phrase):
                 self.assertEqual(answer(phrase).action, "mode_off")
 
     def test_status_not_activation(self):
         self.assertEqual(answer("is GLaDOS mode on?").action, "mode_status")
         self.assertEqual(answer("what mode are you in").action, "mode_status")
+        self.assertEqual(answer("is gee el ay de oo es mode on").action, "mode_status")
+        self.assertEqual(answer("is sarcastic mode on").action, "mode_status")
 
     def test_mode_not_confused_with_quotes_or_gaming_commands(self):
         self.assertEqual(answer("GLaDOS quote").action, "quote")
@@ -50,6 +61,9 @@ class CommandParserTests(unittest.TestCase):
         self.assertEqual(answer("mark this moment").action, "mark_moment")
         self.assertEqual(answer("take a screenshot").action, "screenshot")
         self.assertEqual(answer("battery").action, "battery")
+        self.assertEqual(answer("read my G L A D O S quote").action, "quote")
+        self.assertNotEqual(answer("Gee whiz the game ended").action, "mode_on")
+        self.assertEqual(answer("turn off G L A D O S mode").action, "mode_off")
 
 
 class PersistenceTests(unittest.TestCase):
