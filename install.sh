@@ -7,7 +7,7 @@ PREVIOUS="$HOME/.local/share/hey-frame"
 BIN="$HOME/.local/bin/hey-frame"
 UNIT="$HOME/.config/systemd/user/hey-frame.service"
 
-printf '\nHey Frame 0.5 | Steam Frame offline assistant\n'
+printf '\nHey Frame 0.6 | Steam Frame offline assistant\n'
 printf 'Installer will NOT start the microphone service.\n\n'
 case "$(uname -m)" in aarch64|x86_64) : ;; *) echo 'Unsupported CPU: need Linux ARM64 (x86_64 for dev)' >&2; exit 1;; esac
 for tool in python3 pw-record pw-play; do
@@ -178,6 +178,8 @@ Install complete. Existing listening preference preserved when safe.
 3) ONLY IF both work: ~/.local/bin/hey-frame start (enables future boot autostart)
 4) Stop/disable at any time: ~/.local/bin/hey-frame stop
 
+For GLaDOS mode: say "Hey Frame, is GLaDOS there?" or use dashboard toggle.
+For normal mode: ~/.local/bin/hey-frame mode normal
 For personal Portal quotes: ~/.local/bin/hey-frame add-quote "Your chosen quote"
 For a separate SteamVR panel: look for the Hey Frame tab in Dashboard.
 For diagnostic info: ~/.local/bin/hey-frame doctor
