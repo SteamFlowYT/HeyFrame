@@ -170,7 +170,7 @@ class EndToEndDispatchTests(unittest.TestCase):
                 self.assertIn("enjoying the silence", speaker.spoken[-1])
                 engine.handle("set a timer for five minutes")
                 self.assertIn("Timer set for 5 minutes.", speaker.spoken[-1])
-                self.assertIn("Much like your aim", speaker.spoken[-1])
+                self.assertTrue(any(aside in speaker.spoken[-1]\n                                    for aside in ASIDES["set_timer"]))
                 engine.handle("Normal mode")
                 self.assertEqual(get_mode(), "normal")
                 engine.handle("set a timer for five minutes")
