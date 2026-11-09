@@ -1,4 +1,4 @@
-# Hey Frame v0.6.0
+# Hey Frame v0.6.1
 
 Hey Frame is a small offline voice assistant I made for the Steam Frame. You say "Hey Frame" and you can start and stop recordings, mark highlights, take screenshots, check the battery, set timers and get the occasional sarcastic GLaDOS-style line back. It also adds its own Hey Frame tab to the SteamVR dashboard so you can do most of this with buttons too.
 
@@ -34,7 +34,7 @@ journalctl --user -u hey-frame-dashboard.service -n 50 --no-pager
 
 ## Optional GLaDOS Mode
 
-Want a less cooperative personality while keeping the same practical commands? Say **"Hey Frame, is GLaDOS there?"** (or **"Hey Frame, GLaDOS mode"**). The voice assistant replies:
+Want a less cooperative personality while keeping the same practical commands? Say **"Hey Frame, is GLaDOS there?"**. Since the headset's speech recognition sometimes spells out the name as **G L A D O S**, v0.6.1 understands the letter names too. For the most reliable activation, simply say **"Hey Frame, sarcastic mode"**. The voice assistant replies:
 
 > "Oh. You put the headset back on. I had almost finished enjoying the silence."
 
