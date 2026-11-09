@@ -1,4 +1,4 @@
-# Hey Frame v0.6.1
+# Hey Frame v0.6.2
 
 Hey Frame is a small offline voice assistant I made for the Steam Frame. You say "Hey Frame" and you can start and stop recordings, mark highlights, take screenshots, check the battery, set timers and get the occasional sarcastic GLaDOS-style line back. It also adds its own Hey Frame tab to the SteamVR dashboard so you can do most of this with buttons too.
 
@@ -143,6 +143,14 @@ To find or check the file:
 ```
 
 The file lives at `~/.config/hey-frame/portal-quotes.txt`. You can have up to 200 quotes, each up to 350 characters. Updates won't overwrite it and it's never sent anywhere. The voice reads your quotes using the synthetic voice, it doesn't play Valve's original audio.
+
+## Short voice command recognition
+
+Version 0.6.2 fixes one-breath commands that could be dropped during the switch from the wake word recognizer to the command recognizer. It also adds a small, focused recognizer for **"Hey Frame, portal quote"**, **"Hey Frame, sarcastic mode"** and **"Hey Frame, normal mode"**. Regular dictation, notes, recording commands and timers still use the unrestricted recognizer.
+
+For best results, say **"Hey Frame"**, pause briefly, then say **"portal quote"** or **"sarcastic mode"**. This updated recognition has automated tests but still needs testing with the physical headset microphone.
+
+If a command still comes back as unrecognized, you can temporarily enable **ASR text diagnostics** by adding `HEY_FRAME_DEBUG_TRANSCRIPTS=1` to `~/.config/hey-frame/settings.env` and restarting `hey-frame.service`. Its recognized words are then written to the user service journal, so **turn this off after testing** if you speak private notes. No recordings are saved and logging is off by default.
 
 ## Response speed
 
