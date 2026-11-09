@@ -1,4 +1,4 @@
-# Hey Frame v0.5 — Offline voice assistant for Steam Frame
+# Hey Frame v0.5.1 — Offline voice assistant for Steam Frame
 
 A practical, locally-running Steam Frame assistant: hands-free recording controls, headset battery, short timers, highlights, screenshots and sci-fi humour, plus a **dedicated Hey Frame tab in the SteamVR dashboard**. It is an experimental SteamOS ARM64 project. Native performance and the dashboard UI still require physical headset testing.
 
@@ -75,13 +75,33 @@ A SteamVR overlay has no supported generic API to spoof a **Menu/Start button pr
 
 ## Actual Portal quotes — personal collection
 
-The public project ships only a few very short familiar lines and original GLaDOS-like jokes. It **does not bundle Portal dialogue archives or extracted game audio**. For longer lines you personally want, add them **on your headset**:
+The public project ships only a few very short familiar lines and original GLaDOS-like jokes. It **does not bundle Portal dialogue archives or extracted game audio**. Add the dialogue that you choose **on your headset**, without uploading it to GitHub.
+
+**Add several quotes in one command:**
 
 ```bash
-~/.local/bin/hey-frame add-quote "Your chosen line from the game"
+~/.local/bin/hey-frame add-quotes "Your first quote" "Your second quote" "Your third quote"
 ```
 
-Repeat for additional lines, then ask **"Hey Frame, Portal quote"** or **"Hey Frame, personal quote"**. To find or edit the file:
+**Import a whole text file** (one quote per line, optional # comments):
+
+```bash
+~/.local/bin/hey-frame import-quotes ~/Downloads/portal-quotes.txt
+```
+
+**Or paste multiple lines directly into Konsole** as a single block:
+
+```bash
+~/.local/bin/hey-frame import-quotes - <<'QUOTES'
+Your first personal quote goes here.
+Your second quote goes here.
+Your third quote goes here.
+QUOTES
+```
+
+You can still add only one line with `hey-frame add-quote "Your quote"`. The bulk commands preserve existing quotes, skip duplicates ignoring capitalization, and reject an over-limit batch **without modifying** your collection. Once imported, say **"Hey Frame, Portal quote"** or **"Hey Frame, personal quote"**. Changes are read on the next command; no restart is required.
+
+To find or edit the file:
 
 ```bash
 ~/.local/bin/hey-frame quotes-path
