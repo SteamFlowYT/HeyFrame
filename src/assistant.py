@@ -20,7 +20,7 @@ import time
 
 from commands import answer, read_battery, battery_reply
 from conflicts import frame_dictation_active, WARNING as CONFLICT_WARNING
-from listener import Microphone, Recognizer, audio_level
+from listener import Microphone, Recognizer, audio_level, SHORTCUT_GRAMMAR
 from state import state_path, load_deadline, save_deadline
 from voice import Speaker, VOICE_NAME
 from recording import request as recorder_request
@@ -29,7 +29,7 @@ from gaming import mark_moment, save_note, last_note
 from vr_actions import request as vr_request
 from glados_mode import get_mode, set_mode, decorate
 
-VERSION = '0.6.1'
+VERSION = '0.6.2'
 ROOT = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger('hey-frame')
 
@@ -77,10 +77,12 @@ def asr_test() -> bool:
         model = vosk.Model(str(ROOT/'models'/'vosk-model-small-en-us-0.15'))
         wake = vosk.KaldiRecognizer(model, 16000, '["hey frame", "hay frame", "[unk]"]')
         command = vosk.KaldiRecognizer(model, 16000)
+        shortcut = vosk.KaldiRecognizer(model, 16000, SHORTCUT_GRAMMAR)
         silence = b'\0' * 3200
         wake.AcceptWaveform(silence)
         command.AcceptWaveform(silence)
-        print('Recognition check: PASS. Both wake and command recognizers loaded.')
+        shortcut.AcceptWaveform(silence)
+        print('Recognition check: PASS. Wake, open command and focused command recognizers loaded.')
         return True
     except Exception as exc:
         print('Recognition check: FAILED.',exc,file=sys.stderr)
@@ -303,7 +305,7 @@ def run_foreground():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description='Hey Frame 0.6.1 — offline voice assistant for Steam Frame')
+    p = argparse.ArgumentParser(description='Hey Frame 0.6.2 — offline voice assistant for Steam Frame')
     sub = p.add_subparsers(dest='op', required=True)
     for name in ('version','doctor','mic-test','check-voice','check-asr','run','start','stop','status'):
         sub.add_parser(name)
