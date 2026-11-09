@@ -24,11 +24,11 @@ from listener import Microphone, Recognizer, audio_level
 from state import state_path, load_deadline, save_deadline
 from voice import Speaker, VOICE_NAME
 from recording import request as recorder_request
-from jokes import pick as pick_line, add_quote, quotes_path, personal_quotes
+from jokes import pick as pick_line, add_quote, add_quotes, import_quotes, quotes_path, personal_quotes
 from gaming import mark_moment, save_note, last_note
 from vr_actions import request as vr_request
 
-VERSION = '0.5.0'
+VERSION = '0.5.1'
 ROOT = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger('hey-frame')
 
@@ -292,6 +292,10 @@ def main(argv=None):
         sub.add_parser(name)
     quote_add = sub.add_parser('add-quote', help='append a line to your private Portal quotes file')
     quote_add.add_argument('text')
+    quotes_bulk = sub.add_parser('add-quotes', help='add several private quotes in one command')
+    quotes_bulk.add_argument('texts', nargs='+', help='quote strings, each wrapped in double quotes')
+    quote_import = sub.add_parser('import-quotes', help='import one quote per line from a UTF-8 file; - reads stdin')
+    quote_import.add_argument('file', help='path to quote text file, or - to read stdin')
     sub.add_parser('quotes-path', help='show private quotes file location')
     sub.add_parser('list-quotes', help='list personally added quotes')
     vr = sub.add_parser('vr', help='safe dashboard/screenshot actions')
@@ -323,6 +327,12 @@ def main(argv=None):
         print(answer(opts.text).text)
     elif opts.op == 'add-quote':
         print('Personal quote added:', add_quote(opts.text))
+    elif opts.op == 'add-quotes':
+        count, duplicates = add_quotes(opts.texts)
+        print(f'Added {count} personal quotes. Skipped {duplicates} duplicates. Saved to {quotes_path()}')
+    elif opts.op == 'import-quotes':
+        count, duplicates = import_quotes(opts.file)
+        print(f'Imported {count} personal quotes. Skipped {duplicates} duplicates. Saved to {quotes_path()}')
     elif opts.op == 'quotes-path':
         print(quotes_path())
     elif opts.op == 'list-quotes':
