@@ -61,7 +61,8 @@ class CommandParserTests(unittest.TestCase):
         self.assertEqual(answer("mark this moment").action, "mark_moment")
         self.assertEqual(answer("take a screenshot").action, "screenshot")
         self.assertEqual(answer("battery").action, "battery")
-        self.assertEqual(answer("read my G L A D O S quote").action, "quote")
+        self.assertEqual(answer("G L A D O S quote").action, "quote")
+        self.assertEqual(answer("read my G L A D O S quote").action, "personal_quote")
         self.assertNotEqual(answer("Gee whiz the game ended").action, "mode_on")
         self.assertEqual(answer("turn off G L A D O S mode").action, "mode_off")
 
