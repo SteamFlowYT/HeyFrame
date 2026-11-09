@@ -12,6 +12,7 @@ from array import array
 from collections import deque
 import json
 import logging
+import os
 import re
 import select
 import subprocess
@@ -23,6 +24,34 @@ RATE = 16000
 CHUNK = 3200  # ~100 ms of mono 16-bit audio
 WAKE = re.compile(r'\b(?:hey|hay) frame\b', re.I)
 WAKE_GRAMMAR = json.dumps(['hey frame', 'hay frame', '[unk]'])
+
+# A restricted SECOND recognizer, only used during the brief post-wake command
+# window. The open-grammar recognizer remains in place for notes and timers.
+# Short utterances can get badly mangled by an unrestricted small Vosk model;
+# a tiny grammar gives it the actual words to listen for. These shortcuts are
+# non-destructive voice/personality commands only.
+SHORTCUT_COMMANDS = (
+    'sarcastic mode', 'sarcasm mode', 'be sarcastic', 'turn on sarcasm',
+    'normal mode', 'back to normal', 'turn off sarcasm',
+    'portal quote', 'portal quotes', 'glados quote', 'tell me a portal quote',
+    'tell me a quote', 'give me a quote',
+    'is glados there', 'glados mode', 'activate glados',
+)
+SHORTCUT_SET = frozenset(SHORTCUT_COMMANDS)
+SHORTCUT_GRAMMAR = json.dumps(
+    list(SHORTCUT_COMMANDS)
+    + ['hey frame ' + phrase for phrase in SHORTCUT_COMMANDS]
+    + ['hay frame ' + phrase for phrase in SHORTCUT_COMMANDS]
+    + ['[unk]']
+)
+
+
+def shortcut_match(raw: str) -> str:
+    """Accept only complete, explicitly enumerated shortcut utterances."""
+    phrase = re.sub(r'\s+', ' ', raw.lower()).strip(' ,.!?')
+    phrase = re.sub(r'^(?:hey|hay) frame\s+', '', phrase).strip()
+    return phrase if phrase in SHORTCUT_SET else ''
+
 
 
 def recognized(raw: str, field: str) -> str:
@@ -110,6 +139,8 @@ class Recognizer:
         self.state = 'wake'
         self.wake = self.factory(self.model, RATE, WAKE_GRAMMAR)
         self.command = None
+        self.shortcut = None
+        self.shortcut_text = ''
         self.history.clear()
         self.wake_hits = 0
         self.last_voice_at = self.clock()
@@ -123,6 +154,25 @@ class Recognizer:
 
     def _commit(self, text: str):
         result = self.strip_wake(text)
+        hint = self.shortcut_text
+        if self.shortcut is not None:
+            # A complete FinalResult can be more accurate than the last partial.
+            try:
+                finish = recognized(self.shortcut.FinalResult(), 'text')
+                hint = shortcut_match(finish) or hint
+            except (ValueError, RuntimeError):
+                pass
+        # Never override a different clear command such as "start recording".
+        # Only rescue empty or approximately related, mangled short transcripts.
+        looks_related = any(term in result for term in (
+            'sarcast', 'sarcas', 'normal', 'glad', 'g l a d', 'portal',
+            'port all', 'quote', 'coat', 'mode',
+        ))
+        if hint and (not result or result == '[unk]' or looks_related):
+            result = hint
+        if os.environ.get('HEY_FRAME_DEBUG_TRANSCRIPTS') == '1':
+            LOG.warning('ASR debug (may contain private words): open=%r shortcut=%r resolved=%r',
+                        text, hint, result)
         self.reset()  # reset before invoking callbacks (may temporarily stop mic)
         if result and result != '[unk]':
             self.on_command(result)
@@ -131,7 +181,12 @@ class Recognizer:
         self.state = 'command'
         self.arm_time = self.clock()
         self.last_voice_at = self.arm_time
-        self.command = self.factory(self.model, RATE)  # no huge fixed grammar
+        self.command = self.factory(self.model, RATE)  # free grammar for timer/notes
+        # Constrain only the short-command backup; never constrain dictation.
+        try:
+            self.shortcut = self.factory(self.model, RATE, SHORTCUT_GRAMMAR)
+        except (ValueError, RuntimeError, TypeError):
+            self.shortcut = None
         self.last_phrase = ''
         self.has_command_voice = False
         candidate = ''
@@ -141,8 +196,17 @@ class Recognizer:
                 text = recognized(self.command.Result(), 'text')
                 if self.strip_wake(text):
                     candidate = text
+            if self.shortcut is not None:
+                complete = self.shortcut.AcceptWaveform(buf)
+                raw = recognized(self.shortcut.Result(), 'text') if complete else (
+                    recognized(self.shortcut.PartialResult(), 'partial'))
+                self.shortcut_text = shortcut_match(raw) or self.shortcut_text
         partial = recognized(self.command.PartialResult(), 'partial')
         self.last_phrase = partial or candidate
+        # The entire command may already be present in one breath, inside the
+        # preroll. Previously only later audio could set has_command_voice,
+        # losing short commands after silence.
+        self.has_command_voice = bool(self.strip_wake(self.last_phrase) or self.shortcut_text)
         self.history.clear()
         LOG.info('Wake phrase detected; listening for a command')
         # If Vosk already has a complete one-breath sentence, answer promptly.
@@ -172,6 +236,14 @@ class Recognizer:
         complete = self.command.AcceptWaveform(buf)
         phrase = recognized(self.command.Result(), 'text') if complete else \
                  recognized(self.command.PartialResult(), 'partial')
+        if self.shortcut is not None:
+            short_complete = self.shortcut.AcceptWaveform(buf)
+            raw = recognized(self.shortcut.Result(), 'text') if short_complete else \
+                  recognized(self.shortcut.PartialResult(), 'partial')
+            match = shortcut_match(raw)
+            if match:
+                self.shortcut_text = match
+                self.has_command_voice = True
         if self.strip_wake(phrase):
             self.last_phrase = phrase
             self.has_command_voice = True
