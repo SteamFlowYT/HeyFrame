@@ -207,6 +207,24 @@ def answer(text: str, timer_seconds_left: int | None = None,
     t = re.sub(r'^(?:hey frame|hay frame)\b[ ,]*','',t).strip()
     if not t:
         return Reply('Listening. Please say a command.')
+    # Persona selection is a command, not a change to the recognition model.
+    # Vosk can transcribe GLaDOS as 'glad os' or 'glad us'.
+    glados_names = ('glados', 'glad os', 'glad us', 'gladys')
+    if (has(t, 'normal mode', 'switch to normal', 'back to normal',
+            'disable glados', 'turn off glados', 'glados off',
+            'stop being glados', 'regular voice', 'usual mode')
+            or (has(t, 'turn off', 'disable', 'deactivate') and any(has(t, name) for name in glados_names))):
+        return Reply('Normal response mode restored.', 'mode_off')
+    if (has(t, 'is glados there', 'is glad os there', 'is glad us there',
+            'glados are you there', 'glad os are you there',
+            'activate glados', 'enable glados', 'glados mode', 'glad os mode',
+            'switch to glados', 'bring in glados', 'summon glados',
+            'hello glados', 'hey glados')):
+        return Reply('GLaDOS response mode activated.', 'mode_on')
+    if has(t, 'which voice mode', 'what mode are you in', 'personality mode',
+           'is glados mode on', 'is glados mode active'):
+        return Reply('Checking response mode.', 'mode_status')
+
     # Creator and gameplay actions go before generic words such as time/status.
     if has(t, 'highlight marker', 'mark the moment', 'mark this moment',
            'mark that moment', 'mark highlight', 'bookmark this moment', 'bookmark that'):
@@ -255,35 +273,35 @@ def answer(text: str, timer_seconds_left: int | None = None,
         return Reply('Timer cancelled.' if timer_seconds_left is not None else 'No timer is active.', 'cancel_timer')
     if has(t,'how long on the timer','time left on timer','timer remaining','check timer','timer status'):
         return Reply('No timer is active.' if timer_seconds_left is None else
-                     f'Timer remaining, {format_duration(timer_seconds_left)}.')
+                     f'Timer remaining, {format_duration(timer_seconds_left)}.', 'timer_status')
     if has(t,'timer','countdown','remind me in'):
         seconds = parse_timer(t)
         if seconds is None:
             return Reply('Try: set a timer for five minutes. Maximum two hours.')
         return Reply(f'Timer set for {format_duration(seconds)}.', 'set_timer', seconds)
     if has(t,'battery','charge','remaining power','power level'):
-        return Reply(battery_reply(read_battery(battery_root)))
+        return Reply(battery_reply(read_battery(battery_root)), 'battery')
     if has(t,'time','clock'):
         current = now or datetime.now().astimezone()
-        return Reply(f'Current time, {current.strftime("%I:%M %p").lstrip("0")}')
+        return Reply(f'Current time, {current.strftime("%I:%M %p").lstrip("0")}', 'time')
     if has(t,'date','day is it','today'):
         current = now or datetime.now().astimezone()
-        return Reply(f'Today is {current.strftime("%A %B %d")}.')
+        return Reply(f'Today is {current.strftime("%A %B %d")}.', 'date')
     if has(t,'storage','disk space','free space'):
-        return Reply(storage_reply())
+        return Reply(storage_reply(), 'storage')
     if has(t,'memory','ram'):
-        return Reply(memory_reply())
+        return Reply(memory_reply(), 'memory')
     if has(t,'wi fi','wifi','wireless','signal strength','internet connection'):
-        return Reply(wifi_reply())
+        return Reply(wifi_reply(), 'wifi')
     if has(t,'volume','sound level'):
-        return Reply(volume_reply())
+        return Reply(volume_reply(), 'volume')
     if has(t,'uptime','how long have you been on'):
-        return Reply(uptime_reply())
+        return Reply(uptime_reply(), 'uptime')
     if has(t,'help','what can you do','available commands'):
-        return Reply('Try recording, mark this moment, screenshot, battery, timer, a joke, Portal quote, note to self, or open dashboard.')
+        return Reply('Try recording, mark this moment, screenshot, battery, timer, Portal quote, note to self, or open dashboard. Say is GLaDOS there to enable sarcastic replies, or normal mode to disable them.', 'help')
     if has(t,'steamvr','steam vr','virtual reality running','vr running'):
-        return Reply(steamvr_reply())
+        return Reply(steamvr_reply(), 'steamvr')
     if has(t,'hello','are you there','status report','system status','report'):
-        return Reply('Frame voice system online. ' + battery_reply(read_battery(battery_root)))
+        return Reply('Frame voice system online. ' + battery_reply(read_battery(battery_root)), 'status')
     # No generative answer and no shell execution. Never pretend to understand.
-    return Reply('Command not recognized. Say Hey Frame, then help.')
+    return Reply('Command not recognized. Say Hey Frame, then help.', 'unknown')
