@@ -27,8 +27,9 @@ from recording import request as recorder_request
 from jokes import pick as pick_line, add_quote, add_quotes, import_quotes, quotes_path, personal_quotes
 from gaming import mark_moment, save_note, last_note
 from vr_actions import request as vr_request
+from glados_mode import get_mode, set_mode, decorate
 
-VERSION = '0.5.1'
+VERSION = '0.6.0'
 ROOT = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger('hey-frame')
 
@@ -153,7 +154,11 @@ class Engine:
         self.next_battery_check = self.monotonic() + 60
         self.recognizer = Recognizer(model, recognizer_factory, self.handle, clock=monotonic)
 
-    def speak(self, message: str) -> None:
+    def speak(self, message: str, action: str | None = None) -> None:
+        # Sarcasm only decorates a completed factual response, never a command.
+        # Timers and critical battery warnings have no action and stay plain.
+        if action is not None:
+            message = decorate(action, message)
         # Stop microphone before speaking so generated voice can't self-trigger.
         self.mic.stop()
         try:
@@ -170,33 +175,45 @@ class Engine:
         remaining = None if self.deadline is None else max(0,round(self.deadline-self.wall()))
         reply = answer(phrase, timer_seconds_left=remaining)
         LOG.info('Handled command type: %s', reply.action)
+        if reply.action == 'mode_on':
+            set_mode('glados')
+            self.speak('Oh. You put the headset back on. I had almost finished enjoying the silence.')
+            return
+        if reply.action == 'mode_off':
+            set_mode('normal')
+            self.speak('Normal mode restored. I will try to sound less disappointed.')
+            return
+        if reply.action == 'mode_status':
+            self.speak('GLaDOS mode is active.' if get_mode() == 'glados'
+                       else 'Normal mode is active.')
+            return
         if reply.action in ('record_start', 'record_stop', 'record_status'):
             command = reply.action.removeprefix('record_')
-            self.speak(recorder_request(command))
+            self.speak(recorder_request(command), reply.action)
             return
         if reply.action == 'mark_moment':
-            self.speak(mark_moment())
+            self.speak(mark_moment(), reply.action)
             return
         if reply.action == 'screenshot':
-            self.speak(vr_request('screenshot'))
+            self.speak(vr_request('screenshot'), reply.action)
             return
         if reply.action in ('open_dashboard', 'pause_game'):
             response = vr_request('open_dashboard')
             if reply.action == 'pause_game' and response.startswith('Dashboard opened'):
                 response += ' This does not send a gamepad pause button.'
-            self.speak(response)
+            self.speak(response, reply.action)
             return
         if reply.action == 'resume_game':
-            self.speak(reply.text)
+            self.speak(reply.text, reply.action)
             return
         if reply.action == 'save_note':
-            self.speak(save_note(reply.text))
+            self.speak(save_note(reply.text), reply.action)
             return
         if reply.action == 'last_note':
-            self.speak(last_note())
+            self.speak(last_note(), reply.action)
             return
         if reply.action in ('joke', 'quote', 'personal_quote'):
-            self.speak(pick_line(reply.action))
+            self.speak(pick_line(reply.action), reply.action)
             return
         if reply.action == 'set_timer':
             self.deadline = self.wall() + reply.seconds
@@ -209,7 +226,7 @@ class Engine:
             save_alerts(self.alerts)
         elif reply.action == 'shutdown':
             self.running = False
-        self.speak(reply.text)
+        self.speak(reply.text, reply.action)
 
     def tick(self) -> None:
         if self.deadline is not None and self.wall() >= self.deadline:
@@ -286,7 +303,7 @@ def run_foreground():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description='Hey Frame 0.5 — offline voice assistant for Steam Frame')
+    p = argparse.ArgumentParser(description='Hey Frame 0.6 — offline voice assistant for Steam Frame')
     sub = p.add_subparsers(dest='op', required=True)
     for name in ('version','doctor','mic-test','check-voice','check-asr','run','start','stop','status'):
         sub.add_parser(name)
@@ -298,6 +315,8 @@ def main(argv=None):
     quote_import.add_argument('file', help='path to quote text file, or - to read stdin')
     sub.add_parser('quotes-path', help='show private quotes file location')
     sub.add_parser('list-quotes', help='list personally added quotes')
+    persona = sub.add_parser('mode', help='select response personality or view the active mode')
+    persona.add_argument('name', choices=('glados', 'normal', 'status'))
     vr = sub.add_parser('vr', help='safe dashboard/screenshot actions')
     vr.add_argument('action', choices=('open_dashboard', 'screenshot'))
     sub.add_parser('mark', help='mark a moment in an active recording')
@@ -337,6 +356,8 @@ def main(argv=None):
         print(quotes_path())
     elif opts.op == 'list-quotes':
         print('\n'.join(personal_quotes()) or 'No personal quotes yet.')
+    elif opts.op == 'mode':
+        print('Response mode: ' + (get_mode() if opts.name == 'status' else set_mode(opts.name)))
     elif opts.op == 'mark':
         print(mark_moment())
     elif opts.op == 'vr':
