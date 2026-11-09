@@ -215,15 +215,17 @@ def answer(text: str, timer_seconds_left: int | None = None,
             'stop being glados', 'regular voice', 'usual mode')
             or (has(t, 'turn off', 'disable', 'deactivate') and any(has(t, name) for name in glados_names))):
         return Reply('Normal response mode restored.', 'mode_off')
+    if has(t, 'which voice mode', 'what mode are you in', 'personality mode',
+           'is glados mode on', 'is glados mode active', 'is glad os mode on'):
+        return Reply('Checking response mode.', 'mode_status')
     if (has(t, 'is glados there', 'is glad os there', 'is glad us there',
+            'is glados ther', 'is glad os ther', 'is glad us ther',
+            'is gladys there', 'is gladys ther', 'are you there glados',
             'glados are you there', 'glad os are you there',
             'activate glados', 'enable glados', 'glados mode', 'glad os mode',
             'switch to glados', 'bring in glados', 'summon glados',
             'hello glados', 'hey glados')):
         return Reply('GLaDOS response mode activated.', 'mode_on')
-    if has(t, 'which voice mode', 'what mode are you in', 'personality mode',
-           'is glados mode on', 'is glados mode active'):
-        return Reply('Checking response mode.', 'mode_status')
 
     # Creator and gameplay actions go before generic words such as time/status.
     if has(t, 'highlight marker', 'mark the moment', 'mark this moment',
