@@ -29,7 +29,7 @@ from gaming import mark_moment, save_note, last_note
 from vr_actions import request as vr_request
 from glados_mode import get_mode, set_mode, decorate
 
-VERSION = '0.6.0'
+VERSION = '0.6.1'
 ROOT = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger('hey-frame')
 
@@ -303,7 +303,7 @@ def run_foreground():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description='Hey Frame 0.6 — offline voice assistant for Steam Frame')
+    p = argparse.ArgumentParser(description='Hey Frame 0.6.1 — offline voice assistant for Steam Frame')
     sub = p.add_subparsers(dest='op', required=True)
     for name in ('version','doctor','mic-test','check-voice','check-asr','run','start','stop','status'):
         sub.add_parser(name)
