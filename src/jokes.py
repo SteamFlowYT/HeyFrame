@@ -49,21 +49,113 @@ def personal_quotes(path: Path | None = None) -> list[str]:
     return [s for s in (line.strip() for line in lines) if s and not s.startswith('#') and len(s) <= MAX_LENGTH][:MAX_QUOTES]
 
 
+def _clean_quote(value: str, index: int) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f'Quote {index} is not text.')
+    if '\x00' in value:
+        raise ValueError(f'Quote {index} contains a NUL character.')
+    text = ' '.join(value.split())
+    if len(text) > MAX_LENGTH:
+        raise ValueError(f'Quote {index} is too long (maximum {MAX_LENGTH} characters).')
+    return text
+
+
+def add_quotes(lines, path: Path | None = None) -> tuple[int, int]:
+    """Import a batch of personal quotes with deduplication and atomic replacement.
+
+    Empty lines and lines beginning with # are ignored. All input is validated
+    BEFORE writing so a bad line doesn't result in half an import.
+    Returns (new_quotes_added, duplicates_skipped).
+    """
+    from tempfile import NamedTemporaryFile
+
+    target = path or quotes_path()
+    if target.is_symlink():
+        raise ValueError('Personal quotes file cannot be a symlink.')
+    if target.exists():
+        try:
+            if target.stat().st_size > 128 * 1024:
+                raise ValueError('Personal quotes file is too large.')
+            old = target.read_text(encoding='utf-8')
+        except UnicodeError as exc:
+            raise ValueError('Personal quotes must be UTF-8 text.') from exc
+    else:
+        old = '# Your own Portal lines, one per line. Stored only on this headset.\n'
+
+    existing = personal_quotes(target)
+    normalized = {quote.casefold() for quote in existing}
+    # Do not silently overwrite hand-edited files that exceed supported limits.
+    if len(existing) >= MAX_QUOTES:
+        raise ValueError('Personal quote limit reached (200).')
+    additions: list[str] = []
+    duplicates = 0
+    for index, raw in enumerate(lines, start=1):
+        line = _clean_quote(raw, index)
+        if not line or line.startswith('#'):
+            continue
+        key = line.casefold()
+        if key in normalized:
+            duplicates += 1
+            continue
+        if len(existing) + len(additions) >= MAX_QUOTES:
+            raise ValueError('Import would exceed the 200-quote limit. No changes were made.')
+        additions.append(line)
+        normalized.add(key)
+
+    if not additions:
+        return 0, duplicates
+
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Write in the destination directory, then replace in one filesystem operation
+    # so the running voice assistant never reads a half-imported quote.
+    temporary = None
+    try:
+        with NamedTemporaryFile('w', encoding='utf-8', dir=target.parent,
+                                prefix='.portal-quotes-', delete=False) as out:
+            temporary = Path(out.name)
+            out.write(old)
+            if old and not old.endswith('\n'):
+                out.write('\n')
+            for line in additions:
+                out.write(line + '\n')
+        temporary.chmod(0o600)
+        temporary.replace(target)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+    return len(additions), duplicates
+
+
 def add_quote(text: str, path: Path | None = None) -> Path:
-    """Add a quote explicitly supplied by the owner; no arbitrary filenames."""
-    line = ' '.join(text.split())
-    if not line or len(line) > MAX_LENGTH or '\x00' in line or line.startswith('#'):
+    """Backward-compatible single-quote command, implemented as a batch of one."""
+    line = _clean_quote(text, 1)
+    if not line or line.startswith('#'):
         raise ValueError('Quote must be 1 to 350 characters and not start with #.')
     target = path or quotes_path()
-    if len(personal_quotes(target)) >= MAX_QUOTES:
-        raise ValueError('Personal quote limit reached (200).')
-    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if not target.exists():
-        target.write_text('# Your own Portal lines, one per line. Stored only on this headset.\n', encoding='utf-8')
-        target.chmod(0o600)
-    with target.open('a', encoding='utf-8') as out:
-        out.write(line + '\n')
+    add_quotes([line], target)
     return target
+
+
+def import_quotes(source: str, path: Path | None = None) -> tuple[int, int]:
+    """Read a UTF-8 text file, or '-' for stdin, and import all its quote lines."""
+    import sys
+
+    limit = 128 * 1024
+    if source == '-':
+        data = sys.stdin.read(limit + 1)
+        if len(data.encode('utf-8')) > limit:
+            raise ValueError('Quote import exceeds the 128 KiB limit.')
+    else:
+        file = Path(source).expanduser()
+        if not file.is_file():
+            raise ValueError(f'Quote file not found: {file}')
+        if file.stat().st_size > limit:
+            raise ValueError('Quote import exceeds the 128 KiB limit.')
+        try:
+            data = file.read_text(encoding='utf-8')
+        except UnicodeError as exc:
+            raise ValueError('Quote import file must be UTF-8 text.') from exc
+    return add_quotes(data.splitlines(), path)
 
 
 def pick(category: str, path: Path | None = None) -> str:
