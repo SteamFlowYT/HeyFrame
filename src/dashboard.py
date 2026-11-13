@@ -56,17 +56,25 @@ def invoke_hey_frame(action: str) -> str:
     if not source_available():
         return 'Hey Frame is not installed.'
     try:
-        args = [str(BIN), 'mode', action.removeprefix('mode-')] if action.startswith('mode-') else [str(BIN), action]
+        # Emergency stop bypasses the diagnostic-heavy CLI and directly stops
+        # the user service. It is safe even when native speech modules fail.
+        if action == 'stop':
+            args = ['systemctl', '--user', 'disable', '--now', 'hey-frame.service']
+        else:
+            args = ([str(BIN), 'mode', action.removeprefix('mode-')]
+                    if action.startswith('mode-') else [str(BIN), action])
         result = subprocess.run(args, capture_output=True, text=True,
-                                timeout=45 if action == 'start' else 12)
+                                timeout=45 if action == 'start' else 8)
     except (OSError, subprocess.SubprocessError) as exc:
         return f'Unable to change Hey Frame: {exc}'[:120]
     if result.returncode:
         return (result.stderr.strip() or result.stdout.strip() or 'Unable to change listener')[-150:]
     if action.startswith('mode-'):
         return 'GLaDOS mode enabled.' if action == 'mode-glados' else 'Normal replies enabled.'
-    return ('Listening enabled for future sessions.' if action == 'start'
-            else 'Listening and automatic startup disabled.')
+    if action == 'stop':
+        return ('Listening stopped. Automatic startup disabled.' if not is_listening()
+                else 'Stop command returned, but listening is still active. Check the service.')
+    return 'Listening enabled for future sessions.'
 
 
 def socket_file() -> Path:
@@ -164,16 +172,20 @@ class Panel:
         # Mode can be changed even while the microphone is disabled.
         for box, title, action, color in (
             ((64, 205, 390, 299), 'LISTEN: ON' if listening else 'LISTEN: OFF',
-             'toggle', self.GREEN if listening else self.RED),
+             'listen_stop' if listening else 'listen_start',
+             self.RED if listening else self.GREEN),
             ((410, 205, 736, 299), 'GLaDOS: ON' if glados else 'GLaDOS: OFF',
              'mode_toggle', self.GREEN if glados else self.BLUE),
         ):
+            # STOP LISTENING is ALWAYS available, including during a busy
+            # recording or voice-model check. Other controls can be disabled.
+            enabled = not busy or action == 'listen_stop'
             d.rounded_rectangle(box, radius=20,
-                                fill=color if not busy else (37, 48, 60, 255))
+                                fill=color if enabled else (37, 48, 60, 255))
             d.text(((box[0] + box[2]) // 2, 252),
-                   'Working...' if busy else title,
-                   font=self.mid, fill=self.FG if not busy else self.DIM, anchor='mm')
-            if not busy:
+                   title if enabled else 'Working...',
+                   font=self.mid, fill=self.FG if enabled else self.DIM, anchor='mm')
+            if enabled:
                 self.hitboxes.append((*box, action))
         self.button(d, 323, 'START RECORDING', 'record_start', enabled=not busy)
         self.button(d, 435, 'STOP / SAVE RECORDING', 'record_stop', enabled=not busy, color=self.RED)
@@ -270,9 +282,9 @@ def run_panel():
     event = openvr.VREvent_t()
     refresh_at, check_at = 0.0, 0.0
 
-    def schedule(label, work):
+    def schedule(label, work, emergency=False):
         nonlocal busy, info
-        if busy:
+        if busy and not emergency:
             return
         busy = True
         info = label
@@ -332,8 +344,15 @@ def run_panel():
                     x = event.data.mouse.x
                     y = Panel.HEIGHT - event.data.mouse.y
                     action = panel.clicked(x, y)
-                    if action == 'toggle':
-                        schedule('Switching microphone...', lambda: invoke_hey_frame('stop' if listener else 'start'))
+                    if action == 'listen_stop':
+                        # Fixed STOP action, not a deferred toggle based on
+                        # listener state that may change before worker executes.
+                        schedule('Stopping microphone immediately...',
+                                 lambda: invoke_hey_frame('stop'), emergency=True)
+                        redraw()
+                    elif action == 'listen_start':
+                        schedule('Starting microphone...',
+                                 lambda: invoke_hey_frame('start'))
                         redraw()
                     elif action == 'mode_toggle':
                         schedule('Switching response personality...', lambda: invoke_hey_frame(
