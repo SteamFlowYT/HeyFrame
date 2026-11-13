@@ -53,7 +53,9 @@ def invoke_hey_frame(action: str) -> str:
     """Only selected named CLI subcommands; never interpret user-provided shell text."""
     if action not in ('start', 'stop', 'mode-glados', 'mode-normal'):
         raise ValueError('Unknown dashboard command')
-    if not source_available():
+    # Emergency stop must work even if Hey Frame's Python wrapper or models
+    # are missing/corrupted. systemd owns the microphone process, not Python.
+    if action != 'stop' and not source_available():
         return 'Hey Frame is not installed.'
     try:
         # Emergency stop bypasses the diagnostic-heavy CLI and directly stops
