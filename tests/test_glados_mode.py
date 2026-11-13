@@ -221,11 +221,13 @@ class DashboardTests(unittest.TestCase):
             self.skipTest("Pillow not installed")
         panel = Panel()
         panel.draw(False, False, "Ready", glados=False)
-        self.assertEqual(panel.clicked(200, 250), "toggle")
+        self.assertEqual(panel.clicked(200, 250), "listen_start")
         self.assertEqual(panel.clicked(550, 250), "mode_toggle")
         panel.draw(True, False, "Ready", glados=True)
         self.assertEqual(panel.clicked(550, 250), "mode_toggle")
-        panel.draw(False, True, "Busy", glados=True)
+        self.assertEqual(panel.clicked(200, 250), "listen_stop")
+        panel.draw(True, True, "Busy", glados=True)
+        self.assertEqual(panel.clicked(200, 250), "listen_stop")
         self.assertIsNone(panel.clicked(550, 250))
 
     def test_mode_switch_invokes_only_named_cli(self):
