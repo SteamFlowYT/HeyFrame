@@ -99,6 +99,26 @@ class RecognitionTests(unittest.TestCase):
         self.assertEqual(calls, ['set a timer for five minutes'])
         self.assertEqual(answer(calls[0]).action, 'set_timer')
 
+    def test_wake_requires_five_stable_non_silent_matches(self):
+        calls = []
+        recognizer = Recognizer(object(), SimulatedVosk, calls.append)
+        for _ in range(4):
+            recognizer.feed(b'hey frame')
+        self.assertEqual(recognizer.state, 'wake')
+        recognizer.feed(b'hey frame')
+        self.assertEqual(recognizer.state, 'command')
+
+    def test_silence_never_activates(self):
+        class HallucinatingVosk(SimulatedVosk):
+            def _phrase(self):
+                if self.grammar and 'sarcastic mode' not in self.grammar:
+                    return 'hey frame'
+                return ''
+        recognizer = Recognizer(object(), HallucinatingVosk, lambda _: None)
+        for _ in range(30):
+            recognizer.feed(b'\\x00' * 3200)
+        self.assertEqual(recognizer.state, 'wake')
+
     def test_transcripts_are_not_logged_by_default(self):
         calls = []
         clock = [0.0]
