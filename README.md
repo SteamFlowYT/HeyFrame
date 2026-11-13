@@ -1,4 +1,4 @@
-# Hey Frame v0.6.2
+# Hey Frame v0.6.3
 
 Hey Frame is a small offline voice assistant I made for the Steam Frame. You say "Hey Frame" and you can start and stop recordings, mark highlights, take screenshots, check the battery, set timers and get the occasional sarcastic GLaDOS-style line back. It also adds its own Hey Frame tab to the SteamVR dashboard so you can do most of this with buttons too.
 
@@ -143,6 +143,14 @@ To find or check the file:
 ```
 
 The file lives at `~/.config/hey-frame/portal-quotes.txt`. You can have up to 200 quotes, each up to 350 characters. Updates won't overwrite it and it's never sent anywhere. The voice reads your quotes using the synthetic voice, it doesn't play Valve's original audio.
+
+## False wake-ups and dashboard listening control
+
+Version 0.6.3 tightens wake-word detection: the wake phrase must be heard consistently for five consecutive non-silent audio frames (about half a second), rather than acting on two short, potentially false partial recognitions. This reduces false triggers but may require a more deliberate "Hey Frame" and cannot entirely eliminate false positives from background conversations.
+
+The separate SteamVR **Hey Frame** dashboard has an explicit **LISTEN: OFF** button when listening is active. Unlike a general toggle, this STOP action remains available during other dashboard work, calls `systemctl --user disable --now hey-frame.service` directly and checks that the service actually stopped. If the dashboard itself is missing, open Konsole and run the same command to stop the microphone immediately.
+
+A new installation does not activate listening automatically. Existing listening preferences are preserved when updating, so **manually stop listening before updating if you want it to stay off**.
 
 ## Short voice command recognition
 
