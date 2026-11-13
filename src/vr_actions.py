@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import socket
 
-ALLOWED = {'open_dashboard', 'screenshot', 'recenter_view'}
+ALLOWED = {'open_dashboard', 'screenshot'}
 
 
 def socket_path() -> Path:
