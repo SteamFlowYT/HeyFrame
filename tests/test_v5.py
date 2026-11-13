@@ -129,7 +129,7 @@ class OverlayProtocol(unittest.TestCase):
         panel=Panel()
         image=panel.draw(listening=False,busy=False,info='Ready',rec='connected')
         self.assertEqual(image.size,(800,990))
-        self.assertEqual(panel.clicked(350,260),'toggle')
+        self.assertEqual(panel.clicked(350,260),'listen_start')
         self.assertEqual(panel.clicked(350,710),'screenshot')
         self.assertIsNone(panel.clicked(50,50))
 
