@@ -125,12 +125,13 @@ class Recognizer:
     when Vosk has not generated an endpoint yet.
     """
     def __init__(self, model, factory: Callable, on_command: Callable[[str], None],
-                 clock=time.monotonic, min_wake_hits=2, silence_level=175):
+                 clock=time.monotonic, min_wake_hits=5, silence_level=175):
         self.model, self.factory, self.on_command, self.clock = model, factory, on_command, clock
         self.min_wake_hits = min_wake_hits
         self.silence_level = silence_level
         self.history = deque(maxlen=35)  # at most 3.5 s, no disks
         self.wake_hits = 0
+        self.wake_voice_samples = 0
         self.arm_time = 0.0
         self.state = ''
         self.reset()
@@ -143,6 +144,7 @@ class Recognizer:
         self.shortcut_text = ''
         self.history.clear()
         self.wake_hits = 0
+        self.wake_voice_samples = 0
         self.last_voice_at = self.clock()
         self.arm_time = self.clock()
         self.last_phrase = ''
@@ -220,12 +222,21 @@ class Recognizer:
             complete = self.wake.AcceptWaveform(buf)
             phrase = recognized(self.wake.Result(), 'text') if complete else \
                      recognized(self.wake.PartialResult(), 'partial')
-            if WAKE.search(phrase):
+            # A constrained recognizer can hallucinate the wake phrase from
+            # unrelated sounds. Require consecutive stable matches AND evidence
+            # of real microphone activity; never activate on silent PCM.
+            level = audio_level(buf)
+            if WAKE.search(phrase) and level >= self.silence_level:
                 self.wake_hits += 1
-                if complete or self.wake_hits >= self.min_wake_hits:
+                self.wake_voice_samples += 1
+                if self.wake_hits >= self.min_wake_hits:
                     self._activate()
+            elif level < self.silence_level:
+                self.wake_hits = 0
+                self.wake_voice_samples = 0
             else:
                 self.wake_hits = 0
+                self.wake_voice_samples = 0
             if complete and self.state == 'wake':
                 self.history.clear()
             return
