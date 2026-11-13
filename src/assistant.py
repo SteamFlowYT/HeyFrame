@@ -28,9 +28,8 @@ from jokes import pick as pick_line, add_quote, add_quotes, import_quotes, quote
 from gaming import mark_moment, save_note, last_note
 from vr_actions import request as vr_request
 from glados_mode import get_mode, set_mode, decorate
-from workflows import add_game, launch_game, set_transfer_target, transfer_media, read_config
 
-VERSION = '0.7.0'
+VERSION = '0.6.3'
 ROOT = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger('hey-frame')
 
@@ -190,15 +189,6 @@ class Engine:
             self.speak('GLaDOS mode is active.' if get_mode() == 'glados'
                        else 'Normal mode is active.')
             return
-        if reply.action == 'launch_game':
-            self.speak(launch_game(reply.text), reply.action)
-            return
-        if reply.action == 'transfer_media':
-            self.speak(transfer_media(), reply.action)
-            return
-        if reply.action == 'recenter_view':
-            self.speak(vr_request('recenter_view'), reply.action)
-            return
         if reply.action in ('record_start', 'record_stop', 'record_status'):
             command = reply.action.removeprefix('record_')
             self.speak(recorder_request(command), reply.action)
@@ -315,7 +305,7 @@ def run_foreground():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description='Hey Frame 0.7 — offline voice assistant for Steam Frame')
+    p = argparse.ArgumentParser(description='Hey Frame 0.6.3 — offline voice assistant for Steam Frame')
     sub = p.add_subparsers(dest='op', required=True)
     for name in ('version','doctor','mic-test','check-voice','check-asr','run','start','stop','status'):
         sub.add_parser(name)
@@ -327,14 +317,6 @@ def main(argv=None):
     quote_import.add_argument('file', help='path to quote text file, or - to read stdin')
     sub.add_parser('quotes-path', help='show private quotes file location')
     sub.add_parser('list-quotes', help='list personally added quotes')
-    game = sub.add_parser('add-game', help='allow a Steam game to launch by name')
-    game.add_argument('name', help='game name to say after "launch game"')
-    game.add_argument('app_id', help='numeric Steam app ID')
-    target = sub.add_parser('set-transfer-target', help='set a mounted/available directory for file exports')
-    target.add_argument('directory')
-    sub.add_parser('transfer-files', help='copy completed recordings/screenshots to the configured target')
-    sub.add_parser('list-games', help='show your configured game names')
-
     persona = sub.add_parser('mode', help='select response personality or view the active mode')
     persona.add_argument('name', choices=('glados', 'normal', 'status'))
     vr = sub.add_parser('vr', help='safe dashboard/screenshot actions')
@@ -376,17 +358,6 @@ def main(argv=None):
         print(quotes_path())
     elif opts.op == 'list-quotes':
         print('\n'.join(personal_quotes()) or 'No personal quotes yet.')
-    elif opts.op == 'add-game':
-        print(add_game(opts.name, opts.app_id))
-    elif opts.op == 'set-transfer-target':
-        print(set_transfer_target(opts.directory))
-    elif opts.op == 'transfer-files':
-        print(transfer_media())
-    elif opts.op == 'list-games':
-        games = read_config().get('games', {})
-        print('\n'.join(f'{name}: {app}' for name, app in games.items())
-              if isinstance(games, dict) and games else 'No games configured.')
-
     elif opts.op == 'mode':
         print('Response mode: ' + (get_mode() if opts.name == 'status' else set_mode(opts.name)))
     elif opts.op == 'mark':
