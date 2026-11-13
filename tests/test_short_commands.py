@@ -116,7 +116,7 @@ class RecognitionTests(unittest.TestCase):
                 return ''
         recognizer = Recognizer(object(), HallucinatingVosk, lambda _: None)
         for _ in range(30):
-            recognizer.feed(b'\\x00' * 3200)
+            recognizer.feed(bytes(3200))
         self.assertEqual(recognizer.state, 'wake')
 
     def test_transcripts_are_not_logged_by_default(self):
