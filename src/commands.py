@@ -247,18 +247,6 @@ def answer(text: str, timer_seconds_left: int | None = None,
             'turn on sarcasm', 'switch to sarcastic mode')):
         return Reply('GLaDOS response mode activated.', 'mode_on')
 
-    # Explicitly configured gaming workflows. No arbitrary app names or commands.
-    game_launch = re.fullmatch(r'(?:launch|open|start) (?:my )?(?:steam )?game ([a-z0-9 _-]{1,46})', t)
-    if game_launch:
-        return Reply(game_launch.group(1).strip(), 'launch_game')
-    if t in ('transfer files', 'transfer recordings', 'transfer my recordings',
-             'copy recordings', 'copy my recordings', 'export recordings',
-             'transfer screenshots', 'backup recordings'):
-        return Reply('Copying completed media to the configured destination.', 'transfer_media')
-    if t in ('recenter view', 'recenter vr', 'reset seated view',
-             'reset my view', 'recenter headset', 'centre view', 'center view'):
-        return Reply('Resetting seated VR origin.', 'recenter_view')
-
     # Creator and gameplay actions go before generic words such as time/status.
     if has(t, 'highlight marker', 'mark the moment', 'mark this moment',
            'mark that moment', 'mark highlight', 'bookmark this moment', 'bookmark that'):
