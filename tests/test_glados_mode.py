@@ -230,6 +230,18 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(panel.clicked(200, 250), "listen_stop")
         self.assertIsNone(panel.clicked(550, 250))
 
+    def test_emergency_stop_uses_systemctl_even_if_source_missing(self):
+        with patch("dashboard.source_available", return_value=False), patch(
+                "dashboard.subprocess.run") as run, patch(
+                "dashboard.is_listening", return_value=False):
+            run.return_value.returncode = 0
+            response = invoke_hey_frame("stop")
+            self.assertIn("Listening stopped", response)
+            self.assertEqual(
+                run.call_args.args[0],
+                ["systemctl", "--user", "disable", "--now", "hey-frame.service"],
+            )
+
     def test_mode_switch_invokes_only_named_cli(self):
         with patch("dashboard.source_available", return_value=True), patch(
                 "dashboard.subprocess.run") as run:
