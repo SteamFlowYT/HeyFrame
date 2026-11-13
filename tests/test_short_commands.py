@@ -68,8 +68,8 @@ class RecognitionTests(unittest.TestCase):
         calls = []
         clock = [0.0]
         r = Recognizer(object(), SimulatedVosk, calls.append, clock=lambda: clock[0])
-        r.feed(b'hey frame portal quote')
-        r.feed(b'hey frame portal quote')
+        for _ in range(5):
+            r.feed(b'hey frame portal quote')
         self.assertEqual(r.state, 'command')
         self.assertTrue(r.has_command_voice, 'Preroll must flag one-breath speech')
         clock[0] = 1.2
@@ -81,8 +81,8 @@ class RecognitionTests(unittest.TestCase):
         calls = []
         clock = [0.0]
         r = Recognizer(object(), SimulatedVosk, calls.append, clock=lambda: clock[0])
-        r.feed(b'hey frame sarcastic mode')
-        r.feed(b'hey frame sarcastic mode')
+        for _ in range(5):
+            r.feed(b'hey frame sarcastic mode')
         clock[0] = 1.2
         r.feed(b'')
         self.assertEqual(calls, ['sarcastic mode'])
@@ -92,8 +92,8 @@ class RecognitionTests(unittest.TestCase):
         calls = []
         clock = [0.0]
         r = Recognizer(object(), SimulatedVosk, calls.append, clock=lambda: clock[0])
-        r.feed(b'hey frame set a timer for five minutes')
-        r.feed(b'hey frame set a timer for five minutes')
+        for _ in range(5):
+            r.feed(b'hey frame set a timer for five minutes')
         clock[0] = 1.2
         r.feed(b'')
         self.assertEqual(calls, ['set a timer for five minutes'])
@@ -105,8 +105,8 @@ class RecognitionTests(unittest.TestCase):
         with patch.dict(os.environ, {'HEY_FRAME_DEBUG_TRANSCRIPTS': '0'}), patch(
                 'listener.LOG.warning') as warning:
             r = Recognizer(object(), SimulatedVosk, calls.append, clock=lambda: clock[0])
-            r.feed(b'hey frame portal quote')
-            r.feed(b'hey frame portal quote')
+            for _ in range(5):
+                r.feed(b'hey frame portal quote')
             clock[0] = 1.2
             r.feed(b'')
         warning.assert_not_called()
