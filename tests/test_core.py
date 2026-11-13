@@ -130,14 +130,14 @@ class FakeRecognizer:
 class WakeTests(unittest.TestCase):
     def test_single_breath_query(self):
         seen=[]
-        r=Recognizer(object(),FakeRecognizer,seen.append)
+        r=Recognizer(object(),FakeRecognizer,seen.append,min_wake_hits=1)
         r.feed(b'hey frame how much battery life is left|end')
         self.assertEqual(seen,['how much battery life is left'])
         self.assertEqual(r.state,'wake')
 
     def test_wake_then_command(self):
         out=[]
-        r=Recognizer(object(),FakeRecognizer,out.append)
+        r=Recognizer(object(),FakeRecognizer,out.append,min_wake_hits=2)
         r.feed(b'hey frame')
         r.feed(b'hey frame')
         self.assertEqual(r.state,'command')
@@ -162,7 +162,7 @@ class WakeTests(unittest.TestCase):
 
     def test_timeout_returns_to_wake(self):
         clock=[0.]
-        r=Recognizer(object(),FakeRecognizer,lambda t:None, clock=lambda:clock[0])
+        r=Recognizer(object(),FakeRecognizer,lambda t:None, clock=lambda:clock[0],min_wake_hits=1)
         r.feed(b'hey frame|end')
         self.assertEqual(r.state,'command')
         clock[0]=10
@@ -171,7 +171,7 @@ class WakeTests(unittest.TestCase):
 
     def test_no_command_if_only_wake(self):
         out=[];now=[0.]
-        r=Recognizer(object(),FakeRecognizer,out.append,clock=lambda:now[0])
+        r=Recognizer(object(),FakeRecognizer,out.append,clock=lambda:now[0],min_wake_hits=1)
         r.feed(b'hey frame|end')
         now[0]=10
         r.feed(b'')
@@ -184,7 +184,7 @@ class WakeTests(unittest.TestCase):
             self.assertEqual(recognized(raw,'text'),'')
 
     def test_command_callback_can_stop_microphone(self):
-        out=[];r=Recognizer(object(),FakeRecognizer,out.append)
+        out=[];r=Recognizer(object(),FakeRecognizer,out.append,min_wake_hits=1)
         r.feed(b'hey frame battery|end')
         self.assertEqual(r.state,'wake')
 
