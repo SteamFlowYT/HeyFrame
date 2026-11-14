@@ -1,14 +1,16 @@
 """Optimization regressions: idle memory, ASR silence and fast dashboard start."""
 from pathlib import Path
 import json
+import os
 import sys
+import types
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 BASE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE / 'src'))
-from voice import Speaker
+from voice import Speaker, create_engine
 from listener import Recognizer
 from dashboard import invoke_hey_frame
 
@@ -103,6 +105,29 @@ class OptimizationTests(unittest.TestCase):
         self.assertIs(first,r.wake)
         self.assertEqual(len(constructed),1)
         self.assertEqual(first.resets,1)
+
+    def test_tts_thread_setting_is_bounded(self):
+        class Config:
+            def __init__(self, **kwargs):
+                self.options=kwargs
+            def validate(self):
+                return True
+        fake=types.SimpleNamespace(
+            OfflineTtsConfig=Config, OfflineTtsModelConfig=Config,
+            OfflineTtsVitsModelConfig=Config,
+            OfflineTts=lambda c:c, GenerationConfig=object)
+        with tempfile.TemporaryDirectory() as td:
+            directory=Path(td)
+            (directory/'en_US-glados.onnx').write_bytes(b'mock')
+            (directory/'tokens.txt').write_text('tokens')
+            (directory/'espeak-ng-data').mkdir()
+            for setting,want in (('1',1),('2',2),('999',4),('oops',2)):
+                with self.subTest(setting=setting), patch.dict(
+                        os.environ,{'HEY_FRAME_TTS_THREADS':setting}), patch.dict(
+                        sys.modules,{'sherpa_onnx':fake}):
+                    engine,_=create_engine(directory)
+                    threads=engine.options['model'].options['num_threads']
+                    self.assertEqual(threads,want)
 
     def test_dashboard_start_skips_expensive_asr_validation(self):
         with patch('dashboard.source_available', return_value=True), patch(
