@@ -4,7 +4,13 @@
 set -Eeuo pipefail
 
 REPO="SteamFlowYT/HeyFrame"
-REF="main"
+# Normal installations always use main. Explicit, narrowly allowlisted
+# development branch installs are opt-in and never automatic.
+REF="${HEY_FRAME_REF:-main}"
+case "$REF" in
+  main|optimize-v0.6.4) : ;;
+  *) printf 'Unsupported Hey Frame source ref: %s\n' "$REF" >&2; exit 1 ;;
+esac
 for command_name in curl tar mktemp bash; do
   command -v "$command_name" >/dev/null 2>&1 || { printf 'Missing command: %s\n' "$command_name" >&2; exit 1; }
 done

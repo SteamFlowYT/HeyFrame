@@ -29,7 +29,7 @@ from gaming import mark_moment, save_note, last_note
 from vr_actions import request as vr_request
 from glados_mode import get_mode, set_mode, decorate
 
-VERSION = '0.6.3'
+VERSION = '0.6.4'
 ROOT = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger('hey-frame')
 
@@ -237,6 +237,10 @@ class Engine:
             self.recognizer.reset()
             self.speak('Attention. Timer complete.')
         now = self.monotonic()
+        # Avoid retaining a large native TTS model during long idle sessions.
+        # The default fast mode starts it only when a reply is first requested.
+        if hasattr(self.speaker, 'reap_idle'):
+            self.speaker.reap_idle()
         if self.alerts and now >= self.next_battery_check:
             self.next_battery_check = now + 60
             b = read_battery()
@@ -292,12 +296,17 @@ def run_foreground():
             print('Another Hey Frame listener is already running.', file=sys.stderr)
             return 1
         model = vosk.Model(str(ROOT/'models'/'vosk-model-small-en-us-0.15'))
-        speaker = Speaker(ROOT, fast=os.environ.get('HEY_FRAME_FAST_VOICE', '1') != '0')
-        if speaker.fast:
-            if speaker.warmup():
-                LOG.info('Warm voice engine ready; replies avoid repeated model loading.')
-            else:
-                LOG.warning('Warm voice unavailable; using slower on-demand synthesis.')
+        # Keep idle listening lean. Load the native TTS model on first reply,
+        # reuse it for nearby commands, then automatically free it after 90s.
+        try:
+            idle_seconds = min(600.0, max(30.0,
+                float(os.environ.get('HEY_FRAME_VOICE_IDLE_SECONDS', '90'))))
+        except ValueError:
+            idle_seconds = 90.0
+        speaker = Speaker(ROOT,
+                          fast=os.environ.get('HEY_FRAME_FAST_VOICE', '1') != '0',
+                          idle_timeout=idle_seconds)
+        LOG.info('Voice worker starts on first reply; idle timeout %.0f seconds.', idle_seconds)
         e = Engine(model, vosk.KaldiRecognizer, speaker)
         signal.signal(signal.SIGINT, e.stop)
         signal.signal(signal.SIGTERM, e.stop)
@@ -305,7 +314,7 @@ def run_foreground():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description='Hey Frame 0.6.3 — offline voice assistant for Steam Frame')
+    p = argparse.ArgumentParser(description='Hey Frame 0.6.4 — offline voice assistant for Steam Frame')
     sub = p.add_subparsers(dest='op', required=True)
     for name in ('version','doctor','mic-test','check-voice','check-asr','run','start','stop','status'):
         sub.add_parser(name)
