@@ -45,11 +45,17 @@ def create_engine(model_dir: Path):
     data = model_dir / 'espeak-ng-data'
     if not (model.is_file() and tokens.is_file() and data.is_dir()):
         raise RuntimeError('The voice model files are missing or incomplete')
+    # Expose a bounded tuning knob for comparing performance/battery on ARM64.
+    # Keep the existing two-thread default until measured on the headset.
+    try:
+        threads = min(4, max(1, int(os.environ.get('HEY_FRAME_TTS_THREADS', '2'))))
+    except ValueError:
+        threads = 2
     config = sherpa_onnx.OfflineTtsConfig(
         model=sherpa_onnx.OfflineTtsModelConfig(
             vits=sherpa_onnx.OfflineTtsVitsModelConfig(
                 model=str(model), tokens=str(tokens), data_dir=str(data)),
-            num_threads=2, provider='cpu'), max_num_sentences=1)
+            num_threads=threads, provider='cpu'), max_num_sentences=1)
     if not config.validate():
         raise RuntimeError('Voice model configuration rejected by sherpa-onnx')
     return sherpa_onnx.OfflineTts(config), sherpa_onnx.GenerationConfig
