@@ -86,7 +86,7 @@ class OptimizationTests(unittest.TestCase):
         self.assertEqual(made[0].resets, 1)
         # Upon 5 real-volume frames, recognition resumes immediately.
         for _ in range(5):
-            r.feed(b'\\x10\\x27' * 1600)
+            r.feed(b'\x10\x27' * 1600)
         self.assertEqual(r.state, 'command')
 
     def test_native_wake_reset_reused(self):
