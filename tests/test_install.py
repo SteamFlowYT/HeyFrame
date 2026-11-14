@@ -42,7 +42,9 @@ case "$1" in
         echo dummy > "$HOME/.local/share/hey-frame-v3/models/vits-piper-en_US-glados/en_US-glados.onnx"
         echo tokens > "$HOME/.local/share/hey-frame-v3/models/vits-piper-en_US-glados/tokens.txt"
         exit 0;;
-      *assistant.py) exit 0;;
+      *assistant.py)
+        if [ "$FAIL_VOICE" = 1 ] && [ "$2" = check-voice ]; then exit 41; fi
+        exit 0;;
     esac;;
 esac
 exit 77
@@ -85,6 +87,37 @@ exit 0
             self.assertEqual(p.returncode,0,p.stdout+'\n'+p.stderr)
             calls=(home/'service-calls.txt').read_text()
             self.assertIn('--user enable --now hey-frame.service',calls)
+
+    def test_failed_validation_preserves_previous_running_service_and_sources(self):
+        with tempfile.TemporaryDirectory() as td:
+            home=Path(td)
+            env=self.setup_fake(home)
+            env['PREVIOUS_ENABLED']='1'
+            env['FAIL_VOICE']='1'
+            original=home/'.local/share/hey-frame-v3/src'
+            original.mkdir(parents=True)
+            (original/'assistant.py').write_text('old stable version')
+            p=subprocess.run(['bash',str(BASE/'install.sh')],env=env,
+                             capture_output=True,text=True,timeout=15)
+            self.assertNotEqual(p.returncode,0)
+            self.assertEqual((original/'assistant.py').read_text(),'old stable version')
+            calls=(home/'service-calls.txt').read_text()
+            self.assertNotIn('--user disable --now hey-frame.service',calls)
+            self.assertFalse((home/'.config/systemd/user/hey-frame.service').exists())
+
+    def test_existing_dashboard_is_restarted_after_source_replacement(self):
+        with tempfile.TemporaryDirectory() as td:
+            home=Path(td)
+            env=self.setup_fake(home)
+            sf=home/'.local/share/sfrecorder/venv/bin/python'
+            sf.parent.mkdir(parents=True)
+            sf.write_text('#!/bin/sh\nexit 0\n')
+            sf.chmod(0o755)
+            p=subprocess.run(['bash',str(BASE/'install.sh')],env=env,
+                             capture_output=True,text=True,timeout=15)
+            self.assertEqual(p.returncode,0,p.stderr+'\n'+p.stdout)
+            calls=(home/'service-calls.txt').read_text()
+            self.assertIn('--user restart hey-frame-dashboard.service',calls)
 
     def test_failed_dependency_install_does_not_replace_launcher(self):
         with tempfile.TemporaryDirectory() as d:
