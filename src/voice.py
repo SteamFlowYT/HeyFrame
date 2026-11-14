@@ -6,6 +6,7 @@ the one-shot, minimum-idle-memory mode.
 """
 from __future__ import annotations
 import json
+import logging
 import os
 from pathlib import Path
 import select
@@ -16,6 +17,7 @@ import time
 import wave
 
 VOICE_NAME = 'vits-piper-en_US-glados'
+LOG = logging.getLogger('heyframe.voice')
 
 
 def suit_filter(samples, sample_rate: int):
@@ -177,6 +179,7 @@ class Speaker:
                 stream.close()
 
     def speak(self, text: str, play: bool = True, timeout: float = 55):
+        began = time.monotonic()
         with tempfile.TemporaryDirectory(prefix='hey-frame-voice-') as folder:
             wav = Path(folder) / 'synth.wav'
             # A long-lived worker is loaded only after the first voice
@@ -207,10 +210,14 @@ class Speaker:
                 self.last_activity = self.clock()
             if not wav.is_file() or wav.stat().st_size < 44:
                 raise RuntimeError('Voice synthesis did not create a valid WAV file')
+            synthesised = time.monotonic()
             if play:
                 args = ['pw-play']
                 if os.environ.get('HEY_FRAME_AUDIO_TARGET'):
                     args += ['--target', os.environ['HEY_FRAME_AUDIO_TARGET']]
                 args.append(str(wav))
                 self._execute(args, 30)
+            LOG.info('Speech timing: synthesis %.2fs, playback %.2fs; warm=%s',
+                     synthesised - began, time.monotonic() - synthesised,
+                     self.worker is not None and self.worker.poll() is None)
             return wav.stat().st_size
