@@ -138,7 +138,16 @@ class Recognizer:
 
     def reset(self):
         self.state = 'wake'
-        self.wake = self.factory(self.model, RATE, WAKE_GRAMMAR)
+        previous = getattr(self, 'wake', None)
+        # Reuse the native constrained recognizer instead of reallocating it
+        # on every completed command, if the Vosk binding supports Reset().
+        if previous is not None and callable(getattr(previous, 'Reset', None)):
+            previous.Reset()
+            self.wake = previous
+        else:
+            self.wake = self.factory(self.model, RATE, WAKE_GRAMMAR)
+        self.wake_quiet = 0
+        self.wake_paused = False
         self.command = None
         self.shortcut = None
         self.shortcut_text = ''
@@ -218,6 +227,25 @@ class Recognizer:
     def feed(self, buf: bytes):
         now = self.clock()
         if self.state == 'wake':
+            level = audio_level(buf)
+            if level < self.silence_level:
+                self.wake_quiet += 1
+                # After sustained silence, do not repeatedly run the native
+                # recognizer on empty chunks (10+ calls/sec on idle headset).
+                # A fresh sound immediately re-enables recognition.
+                if self.wake_quiet >= 10:
+                    if not self.wake_paused:
+                        if callable(getattr(self.wake, 'Reset', None)):
+                            self.wake.Reset()
+                        else:
+                            self.wake = self.factory(self.model, RATE, WAKE_GRAMMAR)
+                        self.wake_paused = True
+                        self.history.clear()
+                        self.wake_hits = 0
+                    return
+            else:
+                self.wake_quiet = 0
+                self.wake_paused = False
             self.history.append(buf)
             complete = self.wake.AcceptWaveform(buf)
             phrase = recognized(self.wake.Result(), 'text') if complete else \
@@ -225,7 +253,6 @@ class Recognizer:
             # A constrained recognizer can hallucinate the wake phrase from
             # unrelated sounds. Require consecutive stable matches AND evidence
             # of real microphone activity; never activate on silent PCM.
-            level = audio_level(buf)
             if WAKE.search(phrase) and level >= self.silence_level:
                 self.wake_hits += 1
                 self.wake_voice_samples += 1
