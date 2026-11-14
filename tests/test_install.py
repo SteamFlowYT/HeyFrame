@@ -32,7 +32,11 @@ case "$1" in
  -m)
     if [ "$2" = pip ] && [ "$3" = install ] && [ "${FAIL_PIP:-0}" = 1 ]; then exit 24; fi
     exit 0;;
- -c) exit 0;;
+ -c)
+    case "$2" in
+      *"from importlib.metadata import version"*) exit "${DEPS_OK:-1}";;
+    esac
+    exit 0;;
  *)
     case "$1" in
       *download_models.py)
@@ -104,6 +108,17 @@ exit 0
             calls=(home/'service-calls.txt').read_text()
             self.assertNotIn('--user disable --now hey-frame.service',calls)
             self.assertFalse((home/'.config/systemd/user/hey-frame.service').exists())
+
+    def test_matching_dependencies_skip_pip_reinstall(self):
+        with tempfile.TemporaryDirectory() as td:
+            home=Path(td)
+            env=self.setup_fake(home)
+            env['DEPS_OK']='0'
+            env['FAIL_PIP']='1'
+            p=subprocess.run(['bash',str(BASE/'install.sh')],env=env,
+                             capture_output=True,text=True,timeout=15)
+            self.assertEqual(p.returncode,0,p.stderr+'\n'+p.stdout)
+            self.assertIn('skipping pip reinstall',p.stdout)
 
     def test_existing_dashboard_is_restarted_after_source_replacement(self):
         with tempfile.TemporaryDirectory() as td:
