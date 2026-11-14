@@ -76,10 +76,23 @@ PY="$APP/.venv/bin/python"
   echo 'pip is missing inside the venv. Check the Steam Frame Python environment.' >&2
   exit 1
 }
-printf '\nInstalling ARM64 native wheels and small Python packages...\n'
-"$PY" -m pip install --disable-pip-version-check \
-    --only-binary=vosk,sherpa-onnx,numpy,cffi \
-    'vosk==0.3.45' 'sherpa-onnx==1.13.8' 'numpy>=1.26,<3'
+# Updating app Python does not require downloading/reinstalling native wheels
+# when the pinned dependencies are already present and importable.
+if "$PY" -c '
+from importlib.metadata import version
+import vosk, numpy, sherpa_onnx
+n = tuple(int(x) for x in numpy.__version__.split(".")[:2])
+assert version("vosk") == "0.3.45"
+assert version("sherpa-onnx") == "1.13.8"
+assert (1, 26) <= n < (3, 0)
+' >/dev/null 2>&1; then
+  echo 'Native speech dependencies are already installed; skipping pip reinstall.'
+else
+  printf '\nInstalling ARM64 native wheels and small Python packages...\n'
+  "$PY" -m pip install --disable-pip-version-check \
+      --only-binary=vosk,sherpa-onnx,numpy,cffi \
+      'vosk==0.3.45' 'sherpa-onnx==1.13.8' 'numpy>=1.26,<3'
+fi
 "$PY" -m pip check
 "$PY" -c 'import vosk, numpy, sherpa_onnx; print("Verified: vosk, numpy, sherpa_onnx", numpy.__version__)'
 
