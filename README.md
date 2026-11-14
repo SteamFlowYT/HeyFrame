@@ -178,7 +178,7 @@ This does **not** add passthrough controls, dictation, PC integrations, macros, 
 
 By default (`HEY_FRAME_FAST_VOICE=1`), the voice loads **on demand** and unloads after 90 seconds without a spoken reply. You can adjust the idle timeout by putting `HEY_FRAME_VOICE_IDLE_SECONDS=120` in `~/.config/hey-frame/settings.env`. Supported values are clamped to 30–600 seconds.
 
-For the **lowest idle memory consumption**, set `HEY_FRAME_FAST_VOICE=0`. Then each reply uses a short-lived speech worker (slower, but it leaves no resident model between replies). To disable the voice filter, use `HEY_FRAME_VOICE_STYLE=clean`.
+For the **lowest idle memory consumption**, set `HEY_FRAME_FAST_VOICE=0`. Then each reply uses a short-lived speech worker (slower, but it leaves no resident model between replies). To disable the voice filter, use `HEY_FRAME_VOICE_STYLE=clean`. You can also compare `HEY_FRAME_TTS_THREADS=1` against the default of 2 native synthesis threads; this may lower peak CPU usage but could increase response time, and battery impact has **not** been measured.
 
 After editing that settings file, restart the listener with `systemctl --user restart hey-frame.service` only if it is currently running; restarting does not re-enable an intentionally disabled service.
 
