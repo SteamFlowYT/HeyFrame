@@ -1,8 +1,8 @@
-"""Fast offline speech playback. Keep a warmed TTS worker only while Hey Frame is listening.
+"""Offline speech playback with an on-demand, idle-reaped warm TTS worker.
 
-Ordinary `hey-frame say` keeps using the original one-shot mode to save memory.
-The background service prewarms a persistent synthesizer, configurable with
-HEY_FRAME_FAST_VOICE=0 for a smaller memory footprint.
+Avoid keeping a large synthesizer in memory for hours when nobody is speaking.
+Multiple nearby replies still share one worker. HEY_FRAME_FAST_VOICE=0 forces
+the one-shot, minimum-idle-memory mode.
 """
 from __future__ import annotations
 import json
@@ -82,10 +82,15 @@ def synthesize(text: str, destination: Path, model_dir: Path) -> None:
 
 
 class Speaker:
-    def __init__(self, app_root: Path, fast: bool = False):
+    def __init__(self, app_root: Path, fast: bool = False,
+                 idle_timeout: float = 90.0, clock=time.monotonic):
         self.app_root = app_root
         self.fast = fast
         self.worker = None
+        self.clock = clock
+        self.idle_timeout = max(10.0, float(idle_timeout))
+        self.last_activity = None
+        self.retry_after = 0.0
 
     @staticmethod
     def _execute(args, timeout: int):
@@ -142,10 +147,22 @@ class Speaker:
             return True
         except (OSError, ValueError, RuntimeError):
             self.close()
+            # When the warm worker cannot start, avoid a 25-second startup
+            # penalty on every voice request. Cold TTS remains available.
+            self.retry_after = self.clock() + 300.0
             return False
+
+    def reap_idle(self) -> bool:
+        """Release the resident model after prolonged silence; no disk I/O."""
+        if (self.worker is not None and self.last_activity is not None
+                and self.clock() - self.last_activity >= self.idle_timeout):
+            self.close()
+            return True
+        return False
 
     def close(self) -> None:
         proc, self.worker = self.worker, None
+        self.last_activity = None
         if not proc:
             return
         if proc.poll() is None:
@@ -162,7 +179,12 @@ class Speaker:
     def speak(self, text: str, play: bool = True, timeout: float = 55):
         with tempfile.TemporaryDirectory(prefix='hey-frame-voice-') as folder:
             wav = Path(folder) / 'synth.wav'
-            if self.worker and self.worker.poll() is None:
+            # A long-lived worker is loaded only after the first voice
+            # command, then freed during idle listening.
+            if self.fast and self.clock() >= self.retry_after and (
+                    self.worker is None or self.worker.poll() is not None):
+                self.warmup()
+            if self.worker is not None and self.worker.poll() is None:
                 try:
                     request = json.dumps({'text': text[:350], 'path': str(wav)}, ensure_ascii=True)
                     self.worker.stdin.write((request + '\n').encode('utf-8'))
@@ -170,12 +192,19 @@ class Speaker:
                     answer = self._message(self.worker, min(timeout, 45))
                     if answer.get('status') != 'ok':
                         raise RuntimeError(str(answer.get('error', 'Warm voice failed')))
-                except (OSError, RuntimeError, ValueError) as exc:
+                except (OSError, RuntimeError, ValueError):
+                    # Fail open to a fresh one-shot synthesizer if the warm IPC
+                    # worker dies, rather than silently losing voice output.
                     self.close()
-                    raise RuntimeError('Warm voice engine problem: ' + str(exc)) from exc
+                    self.retry_after = self.clock() + 300.0
+                    wav.unlink(missing_ok=True)
+                    self._execute([sys.executable, str(self.app_root / 'src' / 'voice_worker.py'),
+                                   str(wav), text], int(timeout))
             else:
                 self._execute([sys.executable, str(self.app_root / 'src' / 'voice_worker.py'),
                                str(wav), text], int(timeout))
+            if self.worker is not None and self.worker.poll() is None:
+                self.last_activity = self.clock()
             if not wav.is_file() or wav.stat().st_size < 44:
                 raise RuntimeError('Voice synthesis did not create a valid WAV file')
             if play:
