@@ -1,4 +1,4 @@
-# Hey Frame v0.6.3
+# Hey Frame v0.6.4 (optimization candidate)
 
 Hey Frame is a small offline voice assistant I made for the Steam Frame. You say "Hey Frame" and you can start and stop recordings, mark highlights, take screenshots, check the battery, set timers and get the occasional sarcastic GLaDOS-style line back. It also adds its own Hey Frame tab to the SteamVR dashboard so you can do most of this with buttons too.
 
@@ -160,17 +160,37 @@ For best results, say **"Hey Frame"**, pause briefly, then say **"portal quote"*
 
 If a command still comes back as unrecognized, you can temporarily enable **ASR text diagnostics** by adding `HEY_FRAME_DEBUG_TRANSCRIPTS=1` to `~/.config/hey-frame/settings.env` and restarting `hey-frame.service`. Its recognized words are then written to the user service journal, so **turn this off after testing** if you speak private notes. No recordings are saved and logging is off by default.
 
-## Response speed
+## Optimization-focused v0.6.4 candidate
 
-By default Hey Frame keeps the voice loaded in the background (`HEY_FRAME_FAST_VOICE=1`) so it doesn't have to load it every time it talks. That makes replies a lot faster but uses some extra RAM. I haven't properly measured the CPU and battery impact on the headset yet.
+This branch is an **optimization-only development version**, not a new feature release. It has not been validated on physical Steam Frame hardware yet. The current v0.6.3 release remains available.
 
-If you'd rather save RAM and don't mind slower replies, add `HEY_FRAME_FAST_VOICE=0` to `~/.config/hey-frame/settings.env` and restart the service. If you don't like the radio filter on the voice, add `HEY_FRAME_VOICE_STYLE=clean` in the same file.
+- **Lower idle native-memory footprint:** The GLaDOS synthesizer is no longer loaded when the listening service starts. It loads on the first spoken reply, stays warm briefly for subsequent requests, and exits after 90 seconds of inactivity. This means the **first reply after idle may be slower**.
+- **Less CPU activity in silence:** After around one second of low-level PCM, the Vosk wake recognizer stops processing empty chunks until microphone activity returns. Existing five-frame wake confirmation remains intact.
+- **Less repeated allocation:** Reuse the Vosk wake recognizer through its native `Reset()` method.
+- **Faster dashboard toggle:** Starting listening no longer reloads/test-runs every speech model. It still refuses to start alongside `frame-dictation.service` and checks the listener's actual service state.
+- **Less polling:** A hidden SteamVR dashboard checks listening/personality state less frequently.
+- **Safer upgrades:** Download and validate a staging copy **before** stopping the current listener; restore its previous source if installation fails. A running dashboard service is restarted so it gets the updated code.
+- **Better resource measurements:** The benchmark now periodically samples the listener **and its child microphone/voice processes**, plus the SteamVR tab service when running.
 
-To check how much CPU and RAM the listener uses while idle (this doesn't measure battery):
+This does **not** add passthrough controls, dictation, PC integrations, macros, or an LLM; preserving existing functionality and hardware safety is the purpose of this release.
+
+### Memory versus response speed
+
+By default (`HEY_FRAME_FAST_VOICE=1`), the voice loads **on demand** and unloads after 90 seconds without a spoken reply. You can adjust the idle timeout by putting `HEY_FRAME_VOICE_IDLE_SECONDS=120` in `~/.config/hey-frame/settings.env`. Supported values are clamped to 30–600 seconds.
+
+For the **lowest idle memory consumption**, set `HEY_FRAME_FAST_VOICE=0`. Then each reply uses a short-lived speech worker (slower, but it leaves no resident model between replies). To disable the voice filter, use `HEY_FRAME_VOICE_STYLE=clean`.
+
+After editing that settings file, restart the listener with `systemctl --user restart hey-frame.service` only if it is currently running; restarting does not re-enable an intentionally disabled service.
+
+### Measure CPU and RAM on the actual headset
 
 ```bash
 ~/.local/bin/hey-frame benchmark --seconds 30
 ```
+
+Run once after startup without speaking, again just after requesting a spoken reply, and again after at least 90 seconds of silence. Keep the same game/SteamVR conditions for comparisons. CPU is **% of one core**, even on a multicore headset. Memory is sampled **RSS summed across processes**, not proportional shared memory, and the tool does not directly measure battery life, GPU load or game FPS.
+
+Review [OPTIMIZATION-REPORT.md](OPTIMIZATION-REPORT.md) for validation and test limitations.
 
 ## Troubleshooting
 
