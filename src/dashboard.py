@@ -60,13 +60,21 @@ def invoke_hey_frame(action: str) -> str:
     try:
         # Emergency stop bypasses the diagnostic-heavy CLI and directly stops
         # the user service. It is safe even when native speech modules fail.
-        if action == 'stop':
+        if action == 'start':
+            # The installer already validates native speech modules/models.
+            # Running CLI "start" reloaded Vosk and synthesized audio merely
+            # to toggle the microphone, making the dashboard feel unresponsive.
+            # Preserve the explicit conflicting-dictation safety check.
+            from conflicts import frame_dictation_active
+            if frame_dictation_active():
+                return 'Cannot start while frame-dictation.service is active.'
+            args = ['systemctl', '--user', 'enable', '--now', 'hey-frame.service']
+        elif action == 'stop':
             args = ['systemctl', '--user', 'disable', '--now', 'hey-frame.service']
         else:
-            args = ([str(BIN), 'mode', action.removeprefix('mode-')]
-                    if action.startswith('mode-') else [str(BIN), action])
+            args = [str(BIN), 'mode', action.removeprefix('mode-')]
         result = subprocess.run(args, capture_output=True, text=True,
-                                timeout=45 if action == 'start' else 8)
+                                timeout=12 if action == 'start' else 8)
     except (OSError, subprocess.SubprocessError) as exc:
         return f'Unable to change Hey Frame: {exc}'[:120]
     if result.returncode:
@@ -76,7 +84,8 @@ def invoke_hey_frame(action: str) -> str:
     if action == 'stop':
         return ('Listening stopped. Automatic startup disabled.' if not is_listening()
                 else 'Stop command returned, but listening is still active. Check the service.')
-    return 'Listening enabled for future sessions.'
+    return ('Listening enabled for future sessions.' if is_listening()
+            else 'Start was requested, but the listener is not active. Check its service log.')
 
 
 def socket_file() -> Path:
@@ -283,6 +292,11 @@ def run_panel():
     results = queue.Queue()
     event = openvr.VREvent_t()
     refresh_at, check_at = 0.0, 0.0
+    switch_lock = threading.Lock()  # STOP always runs after an in-flight START.
+
+    def change_listening(action):
+        with switch_lock:
+            return invoke_hey_frame(action)
 
     def schedule(label, work, emergency=False):
         nonlocal busy, info
@@ -329,8 +343,11 @@ def run_panel():
                     redraw()
             except queue.Empty:
                 pass
+            visible = overlay.isOverlayVisible(handle)
             if now >= check_at and not busy:
-                check_at = now + 2.0
+                # Hidden tabs should not spawn systemctl twice every 2 seconds.
+                # React quickly while visible, check every 10s while hidden.
+                check_at = now + (2.0 if visible else 10.0)
                 current = is_listening()
                 current_glados = get_mode() == 'glados'
                 if current != listener or current_glados != glados:
@@ -350,11 +367,11 @@ def run_panel():
                         # Fixed STOP action, not a deferred toggle based on
                         # listener state that may change before worker executes.
                         schedule('Stopping microphone immediately...',
-                                 lambda: invoke_hey_frame('stop'), emergency=True)
+                                 lambda: change_listening('stop'), emergency=True)
                         redraw()
                     elif action == 'listen_start':
                         schedule('Starting microphone...',
-                                 lambda: invoke_hey_frame('start'))
+                                 lambda: change_listening('start'))
                         redraw()
                     elif action == 'mode_toggle':
                         schedule('Switching response personality...', lambda: invoke_hey_frame(
@@ -372,14 +389,14 @@ def run_panel():
                     elif action == 'screenshot':
                         info = take_screenshot(openvr)
                         redraw()
-            if now >= refresh_at and overlay.isOverlayVisible(handle):
+            if now >= refresh_at and visible:
                 refresh_at = now + 5.0
                 from recording import recorder_socket
                 new_state = 'connected' if recorder_socket().is_socket() else 'not connected'
                 if new_state != recorder_state:
                     recorder_state = new_state
                     redraw()
-            time.sleep(0.05 if overlay.isOverlayVisible(handle) or busy else 0.4)
+            time.sleep(0.05 if visible or busy else 0.5)
     finally:
         conn.close()
         openvr.shutdown()
