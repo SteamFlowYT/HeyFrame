@@ -44,7 +44,7 @@ class PerfTests(unittest.TestCase):
                 fields=['S'] + ['0']*19
                 fields[11]=str(ticks);fields[12]='0'
                 (folder/'stat').write_text(f'{pid} (hey frame worker) '+' '.join(fields))
-                (folder/'status').write_text(f'Name: worker\\nVmRSS: {rss} kB\\n')
+                (folder/'status').write_text(f'Name: worker\nVmRSS: {rss} kB\n')
             self.assertEqual(process_tree_stats(111,root),(300,50000,2))
 
     def test_missing_service_is_not_started(self):
