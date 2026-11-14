@@ -7,8 +7,8 @@ PREVIOUS="$HOME/.local/share/hey-frame"
 BIN="$HOME/.local/bin/hey-frame"
 UNIT="$HOME/.config/systemd/user/hey-frame.service"
 
-printf '\nHey Frame 0.6.3 | Steam Frame offline assistant\n'
-printf 'Installer will NOT start the microphone service.\n\n'
+printf '\nHey Frame 0.6.4 | Steam Frame offline assistant\n'
+printf 'Installer preserves your opt-in listening setting; it never enables listening on a fresh installation.\n\n'
 case "$(uname -m)" in aarch64|x86_64) : ;; *) echo 'Unsupported CPU: need Linux ARM64 (x86_64 for dev)' >&2; exit 1;; esac
 for tool in python3 pw-record pw-play; do
   command -v "$tool" >/dev/null 2>&1 || { echo "Missing $tool" >&2; exit 1; }
@@ -20,16 +20,11 @@ WAS_ENABLED=0
 if command -v systemctl >/dev/null 2>&1 && systemctl --user is-enabled --quiet hey-frame.service 2>/dev/null; then
   WAS_ENABLED=1
 fi
-# Stop only the Hey Frame user service; leave all other services untouched.
+# Do not stop the working listener before dependency, model and voice checks.
+# A failed update must leave the previous installation functioning.
 SYSTEMCTL="$(command -v systemctl || true)"
 if [[ -z "$SYSTEMCTL" && -x /usr/bin/systemctl ]]; then SYSTEMCTL=/usr/bin/systemctl; fi
-if [[ -n "$SYSTEMCTL" ]]; then
-  "$SYSTEMCTL" --user disable --now hey-frame.service >/dev/null 2>&1 || true
-  if "$SYSTEMCTL" --user is-active --quiet hey-frame.service 2>/dev/null; then
-    echo 'Old Hey Frame service did not stop. Abort, no files replaced.' >&2
-    exit 1
-  fi
-else
+if [[ -z "$SYSTEMCTL" ]]; then
   echo 'WARNING: systemctl is unavailable. Make sure old Hey Frame is stopped.' >&2
 fi
 
@@ -38,11 +33,37 @@ if [[ -n "$SYSTEMCTL" ]] && "$SYSTEMCTL" --user is-active --quiet frame-dictatio
   echo "This installer will NOT stop another developer's service. New Hey Frame cannot start until it is stopped."
 fi
 
-mkdir -p "$APP/src" "$APP/models" "$HOME/.local/bin" "$HOME/.config/systemd/user"
-cp "$HERE"/src/*.py "$APP/src/"
-cp "$HERE"/README.md "$APP/README.md"
-cp "$HERE"/uninstall.sh "$APP/uninstall.sh"
-chmod 755 "$APP/uninstall.sh"
+mkdir -p "$APP/models" "$HOME/.local/bin" "$HOME/.config/systemd/user"
+STAGE="$(mktemp -d "$APP/.update-XXXXXXXX")"
+BACKUP=""
+SOURCE_REPLACED=0
+SERVICE_STOPPED=0
+cleanup_update() {
+  result=$?
+  trap - EXIT
+  if [[ "$result" -ne 0 ]]; then
+    if [[ "$SOURCE_REPLACED" = 1 ]]; then
+      rm -rf -- "$APP/src"
+      if [[ -n "$BACKUP" && -d "$BACKUP/src" ]]; then
+        mv "$BACKUP/src" "$APP/src" || true
+      fi
+    fi
+    if [[ "$SERVICE_STOPPED" = 1 && "$WAS_ENABLED" = 1 && -n "$SYSTEMCTL" ]]; then
+      "$SYSTEMCTL" --user daemon-reload >/dev/null 2>&1 || true
+      "$SYSTEMCTL" --user enable --now hey-frame.service >/dev/null 2>&1 || true
+    fi
+    echo 'Installation validation failed; previous listener preference restored where possible.' >&2
+  fi
+  rm -rf -- "$STAGE"
+  if [[ -n "$BACKUP" && -d "$BACKUP" && "$result" -eq 0 ]]; then
+    rm -rf -- "$BACKUP"
+  fi
+  exit "$result"
+}
+trap cleanup_update EXIT
+mkdir -p "$STAGE/src"
+cp "$HERE"/src/*.py "$STAGE/src/"
+ln -s "$APP/models" "$STAGE/models"
 if [[ ! -x "$APP/.venv/bin/python" ]]; then
   echo 'Creating isolated Python environment...'
   python3 -m venv "$APP/.venv" || {
@@ -76,14 +97,35 @@ if [[ -d "$PREVIOUS/models" ]]; then
   done
 fi
 printf '\nDownloading any missing offline models...\n'
-"$PY" "$APP/src/download_models.py" "$APP/models"
+"$PY" "$STAGE/src/download_models.py" "$APP/models"
 # Verify synth BEFORE installing service or exposing listener.
 printf '\nTesting offline voice synthesis (no microphone)...\n'
-"$PY" "$APP/src/assistant.py" doctor
-"$PY" "$APP/src/assistant.py" check-asr
-"$PY" "$APP/src/assistant.py" check-voice
+"$PY" "$STAGE/src/assistant.py" doctor
+"$PY" "$STAGE/src/assistant.py" check-asr
+"$PY" "$STAGE/src/assistant.py" check-voice
 
-# Only after all tests pass, replace launch wrapper / user unit.
+# Only now stop the old service. This happens after all model and voice checks.
+if [[ -n "$SYSTEMCTL" ]]; then
+  "$SYSTEMCTL" --user disable --now hey-frame.service >/dev/null 2>&1 || true
+  SERVICE_STOPPED=1
+  if "$SYSTEMCTL" --user is-active --quiet hey-frame.service 2>/dev/null; then
+    echo 'Old Hey Frame service did not stop. Abort, no files replaced.' >&2
+    exit 1
+  fi
+fi
+# Move the verified source into place in one directory rename. Keep the
+# previous source for rollback if a later installer step fails.
+BACKUP="$(mktemp -d "$APP/.previous-src-XXXXXXXX")"
+SOURCE_REPLACED=1
+if [[ -d "$APP/src" ]]; then
+  mv "$APP/src" "$BACKUP/src"
+fi
+mv "$STAGE/src" "$APP/src"
+cp "$HERE"/README.md "$APP/README.md"
+cp "$HERE"/uninstall.sh "$APP/uninstall.sh"
+chmod 755 "$APP/uninstall.sh"
+
+# Only after validation and source replacement, replace launcher/user units.
 cat > "$BIN" <<'EOF'
 #!/usr/bin/env bash
 exec "$HOME/.local/share/hey-frame-v3/.venv/bin/python" "$HOME/.local/share/hey-frame-v3/src/assistant.py" "$@"
@@ -160,7 +202,10 @@ if [[ -n "$SYSTEMCTL" ]]; then
   SF_PY="$HOME/.local/share/sfrecorder/venv/bin/python"
   if [[ -x "$SF_PY" ]] && "$SF_PY" -c 'import openvr, PIL' >/dev/null 2>&1; then
     echo 'Enabling dedicated Hey Frame SteamVR dashboard tab...'
-    "$SYSTEMCTL" --user enable --now hey-frame-dashboard.service || true
+    "$SYSTEMCTL" --user enable hey-frame-dashboard.service >/dev/null 2>&1 || true
+    # Already-running dashboard Python retains its old module until restarted.
+    # The prior installer did not restart it, leaving stale Stop button code.
+    "$SYSTEMCTL" --user restart hey-frame-dashboard.service || true
   else
     echo 'Hey Frame dashboard requires SteamFlow Recorder. Install/update SFRecorder first.'
   fi
